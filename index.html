@@ -83,8 +83,14 @@
     .primary-action:focus-visible, .filter-button:focus-visible, .detail-link:focus-visible, .close-button:focus-visible, .header-nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 
     .hero-image-wrap {
-      align-self: stretch;
-      min-height: 480px;
+      align-self: center;
+      justify-self: center;
+      width: min(78%, 480px);
+      height: auto;
+      aspect-ratio: 1240 / 1867;
+      min-height: 0;
+      margin-inline: auto;
+      transform: none;
       background: var(--surface);
       overflow: hidden;
       position: relative;
@@ -104,7 +110,7 @@
     .hero-image { width: 100%; height: 100%; object-fit: cover; object-position: 52% 38%; display: block; transform: scale(1.04); transition: transform .8s var(--ease); }
     .hero-image-wrap:hover .hero-image { transform: scale(1.08); }
     .orbit { position: absolute; border: 1px solid oklch(0.28 0 0 / .14); border-radius: 50%; pointer-events: none; }
-    .orbit-a { width: 27vw; height: 8vw; right: 17vw; top: 19%; transform: rotate(-24deg); }
+    .orbit-a { width: 27vw; height: 8vw; left: 15%; top: 7%; transform: rotate(-24deg); }
     .orbit-b { width: 15vw; height: 5vw; left: 23%; bottom: 10%; transform: rotate(29deg); }
 
     .subnav {
@@ -205,7 +211,7 @@
       .hero { min-height: auto; grid-template-columns: 1fr; padding-top: 85px; padding-bottom: 30px; }
       h1 { font-size: clamp(50px, 13.8vw, 84px); max-width: none; letter-spacing: -.09em; }
       .captain-note h2 { max-width: none; font-size: clamp(37px, 9.8vw, 60px); letter-spacing: -.085em; }
-      .hero-image-wrap { min-height: 500px; }
+      .hero-image-wrap { min-height: 500px; width: min(100%, 420px); justify-self: center; margin-inline: auto; transform: none; }
       .orbit { display: none; }
       .collection-head, .captain-note { grid-template-columns: 1fr; }
       .collection-grid { grid-template-columns: 1fr; }
