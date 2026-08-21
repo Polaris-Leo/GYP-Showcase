@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="鸽一品历史物品展厅，收录角色周边档案。">
+  <link rel="icon" href="assets/gyp/favicon.png" type="image/png">
+  <title>历史档案｜鸽一品</title>
+  <style>
+    :root {
+      --bg: oklch(1 0 0);
+      --surface: oklch(0.97 0 0);
+      --fg: oklch(0.28 0 0);
+      --muted: oklch(0.56 0 0);
+      --border: oklch(0.9 0 0);
+      --accent: oklch(0.53 0.12 257);
+      --display: "Noto Serif SC", "Songti SC", STSong, serif;
+      --body: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      --mono: ui-monospace, "Cascadia Mono", monospace;
+      --ease: cubic-bezier(.22, .61, .36, 1);
+      --page-x: clamp(20px, 3.3vw, 58px);
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--bg); scroll-behavior: smooth; }
+    body { margin: 0; color: var(--fg); background: var(--bg); font-family: var(--body); overflow-x: hidden; }
+    a { color: inherit; text-decoration: none; }
+    button { color: inherit; font: inherit; }
+    h1, h2, h3, p { margin-top: 0; }
+    figure { margin: 0; }
+
+    .site-header { display: grid; min-height: 88px; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 24px; padding: 24px var(--page-x) 0; }
+    .brand { font-family: var(--mono); font-size: 14px; letter-spacing: .08em; line-height: 1.25; }
+    .header-meta { color: var(--muted); font-size: 12px; line-height: 1.4; text-align: center; }
+    .header-nav { display: flex; justify-content: flex-end; gap: 22px; font-size: 14px; }
+    .header-nav a { border-bottom: 1px solid transparent; transition: border-color .25s var(--ease); }
+    .header-nav a:hover, .header-nav a:focus-visible { border-color: var(--fg); outline: none; }
+
+    main { padding: 0 var(--page-x); }
+    .archive-hero { display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(260px, .82fr); align-items: center; gap: clamp(34px, 7vw, 130px); min-height: min(720px, 76vh); padding: clamp(20px, 2vw, 40px) 0 54px; border-bottom: 1px solid var(--border); }
+    .kicker { margin: 0 0 18px; color: var(--muted); font-family: var(--mono); font-size: 11px; letter-spacing: .08em; }
+    h1 { max-width: 7em; margin-bottom: 22px; font-family: var(--display); font-size: clamp(60px, 9vw, 144px); font-weight: 700; letter-spacing: -.08em; line-height: .86; }
+    .archive-intro { max-width: 31em; margin-bottom: 0; font-size: 15px; line-height: 1.8; }
+    .archive-index { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; border: 1px solid var(--border); background: var(--border); }
+    .archive-index div { min-height: 120px; padding: 13px; background: var(--bg); }
+    .archive-index strong { display: block; margin-bottom: 20px; font-family: var(--display); font-size: clamp(34px, 4vw, 58px); letter-spacing: -.07em; line-height: 1; }
+    .archive-index span { color: var(--muted); font-family: var(--mono); font-size: 10px; line-height: 1.5; }
+
+    .gallery-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, .58fr); gap: 36px; padding: clamp(80px, 11vw, 150px) 0 42px; border-bottom: 1px solid var(--fg); }
+    .gallery-head h2 { margin: 0; font-family: var(--display); font-size: clamp(42px, 6vw, 84px); letter-spacing: -.07em; line-height: .96; }
+    .gallery-head p { align-self: end; max-width: 32em; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.75; }
+    .view-switcher { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+    .view-switcher > span { color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .05em; }
+    .view-controls { display: flex; gap: 6px; }
+    .view-button { min-height: 44px; border: 1px solid transparent; background: var(--bg); padding: 0 12px; cursor: pointer; font-size: 12px; transition: border-color .25s var(--ease), background .25s var(--ease); }
+    .view-button:hover { border-color: var(--border); background: var(--surface); }
+    .view-button.is-active { border-color: var(--fg); }
+    .view-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+    .archive-view[data-view="list"] .archive-grid { display: none; }
+    .archive-view[data-view="grid"] .archive-list { display: none; }
+    .archive-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+    .archive-grid-card { min-height: 508px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--bg); cursor: pointer; transition: background .3s var(--ease); }
+    .archive-grid-card[hidden] { display: none; }
+    .archive-grid-card:hover { background: var(--surface); }
+    .archive-grid-card:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+    .grid-image { height: 340px; overflow: hidden; background: var(--surface); }
+    .grid-image img { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .7s var(--ease); }
+    .archive-grid-card:hover .grid-image img { transform: scale(1.05); }
+    .grid-copy { display: flex; min-height: 144px; flex-direction: column; padding: 14px; }
+    .grid-meta { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .04em; }
+    .grid-copy h3 { margin: auto 0 0; font-family: var(--display); font-size: clamp(23px, 2.2vw, 33px); letter-spacing: -.055em; line-height: 1; }
+    .grid-copy p { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+
+    .archive-list { border-top: 0; }
+    .archive-item { display: grid; grid-template-columns: minmax(110px, .46fr) minmax(240px, 1fr) minmax(220px, .82fr); gap: clamp(20px, 3.5vw, 60px); min-height: 330px; padding: 20px 0; border-bottom: 1px solid var(--border); }
+    .archive-item[hidden] { display: none; }
+    .archive-date { margin: 0; font-family: var(--mono); font-size: clamp(18px, 1.9vw, 27px); letter-spacing: -.06em; }
+    .archive-image { position: relative; min-height: 290px; overflow: hidden; background: var(--surface); }
+    .archive-image img { width: 100%; height: 100%; display: block; object-fit: cover; transition: transform .7s var(--ease); }
+    .archive-item:hover .archive-image img { transform: scale(1.045); }
+    .image-note { position: absolute; left: 12px; bottom: 12px; padding: 5px 7px; background: oklch(1 0 0 / .9); font-family: var(--mono); font-size: 10px; letter-spacing: .05em; }
+    .archive-copy { display: flex; flex-direction: column; padding: 5px 0 4px; }
+    .archive-status { margin: 0 0 auto; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .05em; }
+    .archive-copy h3 { margin: 34px 0 12px; font-family: var(--display); font-size: clamp(30px, 3.2vw, 48px); letter-spacing: -.06em; line-height: 1; }
+    .archive-copy p { max-width: 28em; margin-bottom: 0; font-size: 13px; line-height: 1.7; }
+    .archive-meta { margin-top: auto; padding-top: 22px; color: var(--muted); font-family: var(--mono); font-size: 10px; line-height: 1.7; }
+
+    dialog { width: min(920px, calc(100vw - 28px)); border: 0; padding: 0; background: var(--bg); color: var(--fg); box-shadow: 0 24px 80px oklch(0.28 0 0 / .24); }
+    dialog::backdrop { background: oklch(0.28 0 0 / .38); backdrop-filter: blur(3px); }
+    .dialog-inner { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(260px, .95fr); min-height: 510px; }
+    .dialog-image { min-height: 510px; background: var(--surface); overflow: hidden; }
+    .dialog-image img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .dialog-copy { display: flex; flex-direction: column; padding: 19px; }
+    .close-button { align-self: flex-end; width: 44px; min-height: 44px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; font-size: 20px; transition: background .25s var(--ease); }
+    .close-button:hover { background: var(--surface); }
+    .close-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+    .dialog-number { margin: auto 0 15px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+    .dialog-copy h2 { margin-bottom: 14px; font-family: var(--display); font-size: clamp(42px, 5vw, 70px); letter-spacing: -.07em; line-height: .95; }
+    .dialog-copy p { margin-bottom: 24px; font-size: 14px; line-height: 1.75; }
+    .dialog-details { border-top: 1px solid var(--border); font-family: var(--mono); font-size: 11px; line-height: 1.8; padding-top: 12px; }
+
+    .pagination { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 26px 0 clamp(90px, 12vw, 150px); border-bottom: 1px solid var(--fg); }
+    .page-status { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+    .page-controls { display: flex; gap: 8px; }
+    .page-button { min-width: 82px; min-height: 44px; border: 1px solid var(--fg); background: var(--bg); cursor: pointer; font-size: 12px; transition: background .25s var(--ease), color .25s var(--ease); }
+    .page-button:hover:not(:disabled) { background: var(--fg); color: var(--bg); }
+    .page-button:disabled { border-color: var(--border); color: var(--muted); cursor: not-allowed; }
+    .page-button:focus-visible, .back-to-top:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+    .back-to-top { position: fixed; right: clamp(16px, 2vw, 30px); bottom: clamp(16px, 2vw, 30px); z-index: 10; width: 48px; min-height: 48px; border: 1px solid var(--fg); background: var(--bg); color: var(--fg); cursor: pointer; font-family: var(--mono); font-size: 11px; opacity: 0; pointer-events: none; transform: translateY(10px); transition: opacity .25s var(--ease), transform .25s var(--ease), background .25s var(--ease), color .25s var(--ease); }
+    .back-to-top.is-visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
+    .back-to-top:hover { background: var(--fg); color: var(--bg); }
+
+    footer { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; padding: 16px var(--page-x) 24px; color: var(--muted); font-family: var(--mono); font-size: 10px; line-height: 1.4; }
+    footer span:last-child { text-align: right; }
+
+    @media (max-width: 760px) {
+      .site-header { grid-template-columns: 1fr auto; }
+      .header-meta { display: none; }
+      .archive-hero, .gallery-head { grid-template-columns: 1fr; }
+      .archive-hero { min-height: auto; padding-top: 85px; }
+      h1 { max-width: none; font-size: clamp(52px, 14vw, 84px); letter-spacing: -.09em; }
+      .archive-index { max-width: 440px; }
+      .archive-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-image { height: 285px; }
+      .archive-item { grid-template-columns: minmax(94px, .4fr) minmax(0, 1fr); gap: 18px; min-height: 0; }
+      .archive-image { grid-column: 2; min-height: 330px; }
+      .archive-copy { grid-column: 2; min-height: 235px; }
+      .dialog-inner { grid-template-columns: 1fr; }
+      .dialog-image { min-height: 300px; max-height: 48vh; }
+      .dialog-copy { min-height: 380px; }
+      footer { grid-template-columns: 1fr; gap: 7px; }
+      footer span:last-child { text-align: left; }
+    }
+    @media (max-width: 470px) {
+      .header-nav { gap: 10px; }
+      .archive-grid { grid-template-columns: 1fr; }
+      .grid-image { height: 330px; }
+      .archive-item { grid-template-columns: 1fr; gap: 14px; padding: 16px 0 22px; }
+      .archive-image, .archive-copy { grid-column: auto; }
+      .archive-image { min-height: 330px; }
+      .archive-copy { min-height: 210px; }
+      .archive-copy h3 { margin-top: 28px; }
+      .pagination { align-items: flex-start; flex-direction: column; }
+      .page-controls { width: 100%; }
+      .page-button { flex: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header" data-od-id="archive-header">
+    <a href="index.html" class="brand" data-od-id="archive-brand-home">鸽一品<br>GEYIPIN</a>
+    <p class="header-meta">角色周边历史档案<br>演示档案 2025–2026</p>
+    <nav class="header-nav" aria-label="页面导航" data-od-id="archive-navigation">
+      <a href="index.html" data-od-id="nav-current-collection">当前展厅</a>
+      <a href="#archive-list" data-od-id="nav-archive-list">历史展厅</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="archive-hero" data-od-id="archive-hero">
+      <div>
+        <p class="kicker">ARCHIVE / 2025.10 — 2026.06</p>
+        <h1 data-od-id="archive-title">让每一件，<br>都有来处。</h1>
+        <p class="archive-intro">这里收录曾经出现过的周边与纪念物。首批六件作为档案模板：名称与时间线用于展示，图片、规格、获得方式仍待对应的真实资料补全。</p>
+      </div>
+      <div class="archive-index" data-od-id="archive-summary">
+        <div><strong>06</strong><span>首批档案条目<br>等待实物资料</span></div>
+        <div><strong>02</strong><span>分页浏览<br>每页三件物品</span></div>
+      </div>
+    </section>
+
+    <section id="archive-list" data-od-id="archive-list-section">
+      <div class="gallery-head">
+        <h2 data-od-id="archive-list-heading">历史物品<br>展厅</h2>
+        <p>每条档案均保留日期、物品类型与资料状态。未来补齐实物照片后，这里可持续作为历年周边的索引入口，而不是让旧物品从页面中消失。</p>
+      </div>
+
+      <div class="view-switcher" data-od-id="archive-view-switcher">
+        <span>查看方式</span>
+        <div class="view-controls" role="group" aria-label="切换历史档案查看方式">
+          <button class="view-button is-active" type="button" data-view-target="list" aria-pressed="true" data-od-id="archive-list-view">列表</button>
+          <button class="view-button" type="button" data-view-target="grid" aria-pressed="false" data-od-id="archive-grid-view">表格</button>
+        </div>
+      </div>
+
+      <div class="archive-view" data-view="list" data-od-id="archive-view">
+        <div class="archive-list" data-od-id="archive-list">
+        <article class="archive-item" data-page="1" data-od-id="archive-item-star-wing-stand">
+          <p class="archive-date">2025<br>10</p>
+          <figure class="archive-image"><img src="assets/gyp/hero-sky.png" alt="历史物品示例图：蓝天与白鸽主题角色原画" loading="lazy"><span class="image-note">示例图／待替换</span></figure>
+          <div class="archive-copy"><p class="archive-status">ARCHIVE 01 / 待补资料</p><h3>星羽立牌</h3><p>首批历史档案的示例条目：以飞鸟和缎带为轮廓的双层亚克力立牌，待补充真实设计稿、尺寸与发售渠道。</p><p class="archive-meta">类别：亚克力立牌<br>获得方式：待补充</p></div>
+        </article>
+        <article class="archive-item" data-page="1" data-od-id="archive-item-cloud-badge-set">
+          <p class="archive-date">2025<br>11</p>
+          <figure class="archive-image"><img src="assets/gyp/pigeon-plush.png" alt="历史物品示例图：抱着小鸟玩偶的角色原画" loading="lazy"><span class="image-note">示例图／待替换</span></figure>
+          <div class="archive-copy"><p class="archive-status">ARCHIVE 02 / 待补资料</p><h3>云团徽章组</h3><p>以云朵、小鸟和表情切片组织的收藏徽章组。此处用于记录日后需要补录的图案、工艺与实际发售月份。</p><p class="archive-meta">类别：马口铁徽章<br>获得方式：待补充</p></div>
+        </article>
+        <article class="archive-item" data-page="1" data-od-id="archive-item-sky-card-set">
+          <p class="archive-date">2025<br>12</p>
+          <figure class="archive-image"><img src="assets/gyp/birthday-set.png" alt="历史物品示例图：生日主题角色原画" loading="lazy"><span class="image-note">示例图／待替换</span></figure>
+          <div class="archive-copy"><p class="archive-status">ARCHIVE 03 / 待补资料</p><h3>冬日天空透卡</h3><p>一组围绕节日问候设计的透明卡片。档案完成时可在此补上每张卡的正反面、套组数量与原始包装照片。</p><p class="archive-meta">类别：透卡套组<br>获得方式：待补充</p></div>
+        </article>
+        <article class="archive-item" data-page="1" data-od-id="archive-item-feather-keychain">
+          <p class="archive-date">2026<br>02</p>
+          <figure class="archive-image"><img src="assets/gyp/galaxy-cafe.png" alt="历史物品示例图：端着料理的角色原画" loading="lazy"><span class="image-note">示例图／待替换</span></figure>
+          <div class="archive-copy"><p class="archive-status">ARCHIVE 04 / 待补资料</p><h3>羽毛信笺挂件</h3><p>以角色来信作为概念的金属或亚克力挂件。这里保留了一个适合补入挂件实拍、材质与随附卡片说明的位置。</p><p class="archive-meta">类别：钥匙扣／挂件<br>获得方式：待补充</p></div>
+        </article>
+        <article class="archive-item" data-page="1" data-od-id="archive-item-birthday-color-paper">
+          <p class="archive-date">2026<br>04</p>
+          <figure class="archive-image"><img src="assets/gyp/birthday-set.png" alt="历史物品示例图：生日主题角色原画" loading="lazy"><span class="image-note">示例图／待替换</span></figure>
+          <div class="archive-copy"><p class="archive-status">ARCHIVE 05 / 待补资料</p><h3>生日纪念色纸</h3><p>用于记录一年一次的祝福时刻。后续可增加绘师、签名形式、寄送范围与完整包装等已确认资料。</p><p class="archive-meta">类别：纪念色纸<br>获得方式：待补充</p></div>
+        </article>
+        <article class="archive-item" data-page="2" data-od-id="archive-item-summer-acrylic-stand" hidden>
+          <p class="archive-date">2026<br>06</p>
+          <figure class="archive-image"><img src="assets/gyp/hero-sky.png" alt="历史物品示例图：蓝天与白鸽主题角色原画" loading="lazy"><span class="image-note">示例图／待替换</span></figure>
+          <div class="archive-copy"><p class="archive-status">ARCHIVE 06 / 待补资料</p><h3>夏日集会立牌</h3><p>这一页时间线暂以夏日主题收束。未来替换为实物照后，可成为浏览历年物品、补充再售讯息的长期档案入口。</p><p class="archive-meta">类别：亚克力立牌<br>获得方式：待补充</p></div>
+        </article>
+      </div>
+
+        <div class="archive-grid" data-od-id="archive-grid">
+          <article class="archive-grid-card" data-archive-grid-card="1" data-item="star" role="button" tabindex="0" aria-label="查看星羽立牌物品说明" data-od-id="archive-grid-card-star-wing-stand"><div class="grid-image"><img src="assets/gyp/hero-sky.png" alt="星羽立牌示例图" loading="lazy"></div><div class="grid-copy"><div class="grid-meta"><span>2025.10</span><span>立牌</span></div><h3>星羽立牌</h3><p>ARCHIVE 01 ／ 待补资料</p></div></article>
+          <article class="archive-grid-card" data-archive-grid-card="2" data-item="badge" role="button" tabindex="0" aria-label="查看云团徽章组物品说明" data-od-id="archive-grid-card-cloud-badge-set"><div class="grid-image"><img src="assets/gyp/pigeon-plush.png" alt="云团徽章组示例图" loading="lazy"></div><div class="grid-copy"><div class="grid-meta"><span>2025.11</span><span>徽章</span></div><h3>云团徽章组</h3><p>ARCHIVE 02 ／ 待补资料</p></div></article>
+          <article class="archive-grid-card" data-archive-grid-card="3" data-item="card" role="button" tabindex="0" aria-label="查看冬日天空透卡物品说明" data-od-id="archive-grid-card-sky-card-set"><div class="grid-image"><img src="assets/gyp/birthday-set.png" alt="冬日天空透卡示例图" loading="eager" fetchpriority="high"></div><div class="grid-copy"><div class="grid-meta"><span>2025.12</span><span>透卡</span></div><h3>冬日天空透卡</h3><p>ARCHIVE 03 ／ 待补资料</p></div></article>
+          <article class="archive-grid-card" data-archive-grid-card="4" data-item="keychain" role="button" tabindex="0" aria-label="查看羽毛信笺挂件物品说明" data-od-id="archive-grid-card-feather-keychain"><div class="grid-image"><img src="assets/gyp/galaxy-cafe.png" alt="羽毛信笺挂件示例图" loading="lazy"></div><div class="grid-copy"><div class="grid-meta"><span>2026.02</span><span>挂件</span></div><h3>羽毛信笺挂件</h3><p>ARCHIVE 04 ／ 待补资料</p></div></article>
+          <article class="archive-grid-card" data-archive-grid-card="5" data-item="color-paper" role="button" tabindex="0" aria-label="查看生日纪念色纸物品说明" data-od-id="archive-grid-card-birthday-color-paper"><div class="grid-image"><img src="assets/gyp/birthday-set.png" alt="生日纪念色纸示例图" loading="lazy"></div><div class="grid-copy"><div class="grid-meta"><span>2026.04</span><span>色纸</span></div><h3>生日纪念色纸</h3><p>ARCHIVE 05 ／ 待补资料</p></div></article>
+          <article class="archive-grid-card" data-archive-grid-card="6" data-item="summer" role="button" tabindex="0" aria-label="查看夏日集会立牌物品说明" data-od-id="archive-grid-card-summer-acrylic-stand" hidden><div class="grid-image"><img src="assets/gyp/hero-sky.png" alt="夏日集会立牌示例图" loading="lazy"></div><div class="grid-copy"><div class="grid-meta"><span>2026.06</span><span>立牌</span></div><h3>夏日集会立牌</h3><p>ARCHIVE 06 ／ 待补资料</p></div></article>
+        </div>
+      </div>
+
+      <div class="pagination" data-od-id="archive-pagination">
+        <span class="page-status" aria-live="polite">第 1 页，共 2 页</span>
+        <div class="page-controls">
+          <button class="page-button" type="button" data-page-action="previous" disabled data-od-id="archive-page-previous">上一页</button>
+          <button class="page-button" type="button" data-page-action="next" data-od-id="archive-page-next">下一页</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="archive-dialog" aria-labelledby="dialog-title" data-od-id="archive-detail-dialog">
+    <div class="dialog-inner">
+      <div class="dialog-image"><img id="dialog-image" src="" alt=""></div>
+      <div class="dialog-copy">
+        <button class="close-button" type="button" aria-label="关闭说明" data-od-id="close-archive-dialog">×</button>
+        <p class="dialog-number" id="dialog-number"></p>
+        <h2 id="dialog-title"></h2>
+        <p id="dialog-description"></p>
+        <div class="dialog-details" id="dialog-details"></div>
+      </div>
+    </div>
+  </dialog>
+
+  <button class="back-to-top" type="button" aria-label="回到页面顶端" data-od-id="archive-back-to-top">顶部 ↑</button>
+
+  <footer data-od-id="archive-footer">
+    <span>© 2026 鸽一品</span>
+    <span>历史物品展厅 / DEMO</span>
+    <span>请以真实资料替换示例信息</span>
+  </footer>
+
+  <script>
+    const listItems = [...document.querySelectorAll('.archive-item')];
+    const gridCards = [...document.querySelectorAll('[data-archive-grid-card]')];
+    const view = document.querySelector('.archive-view');
+    const viewButtons = [...document.querySelectorAll('[data-view-target]')];
+    const previousButton = document.querySelector('[data-page-action="previous"]');
+    const nextButton = document.querySelector('[data-page-action="next"]');
+    const pageStatus = document.querySelector('.page-status');
+    const backToTop = document.querySelector('.back-to-top');
+    const listPageSize = 3;
+    const gridPageSize = 3;
+    const archiveDialog = document.querySelector('#archive-dialog');
+    const dialogImage = document.querySelector('#dialog-image');
+    const dialogTitle = document.querySelector('#dialog-title');
+    const dialogNumber = document.querySelector('#dialog-number');
+    const dialogDescription = document.querySelector('#dialog-description');
+    const dialogDetails = document.querySelector('#dialog-details');
+    const closeDialog = document.querySelector('.close-button');
+    const archiveDetails = {
+      star: { number: 'ARCHIVE 01 / 2025.10', title: '星羽立牌', image: 'assets/gyp/hero-sky.png', alt: '星羽立牌示例图', description: '以飞鸟和缎带为轮廓的双层亚克力立牌。当前信息为档案模板，等待真实设计稿和实物照片补全。', details: '类别：亚克力立牌<br>资料状态：待补资料<br>获得方式：待补充' },
+      badge: { number: 'ARCHIVE 02 / 2025.11', title: '云团徽章组', image: 'assets/gyp/pigeon-plush.png', alt: '云团徽章组示例图', description: '以云朵、小鸟与表情切片组织的收藏徽章组。后续可在此记录图案、工艺和实际发售月份。', details: '类别：马口铁徽章<br>资料状态：待补资料<br>获得方式：待补充' },
+      card: { number: 'ARCHIVE 03 / 2025.12', title: '冬日天空透卡', image: 'assets/gyp/birthday-set.png', alt: '冬日天空透卡示例图', description: '围绕节日问候的透明卡片套组。档案完成时可补录正反面、套组数量与原始包装照片。', details: '类别：透卡套组<br>资料状态：待补资料<br>获得方式：待补充' },
+      keychain: { number: 'ARCHIVE 04 / 2026.02', title: '羽毛信笺挂件', image: 'assets/gyp/galaxy-cafe.png', alt: '羽毛信笺挂件示例图', description: '以角色来信为概念的金属或亚克力挂件，适合补入材质、随附卡片与实物细节。', details: '类别：钥匙扣／挂件<br>资料状态：待补资料<br>获得方式：待补充' },
+      'color-paper': { number: 'ARCHIVE 05 / 2026.04', title: '生日纪念色纸', image: 'assets/gyp/birthday-set.png', alt: '生日纪念色纸示例图', description: '用于记录一年一次的祝福时刻。后续可增加绘师、签名形式、寄送范围与完整包装资料。', details: '类别：纪念色纸<br>资料状态：待补资料<br>获得方式：待补充' },
+      summer: { number: 'ARCHIVE 06 / 2026.06', title: '夏日集会立牌', image: 'assets/gyp/hero-sky.png', alt: '夏日集会立牌示例图', description: '以夏日主题收束的历史条目。未来替换为实物照后，可作为历年物品与再售讯息的长期档案入口。', details: '类别：亚克力立牌<br>资料状态：待补资料<br>获得方式：待补充' }
+    };
+    let currentPage = 1;
+
+    function getActivePageSize() {
+      return view.dataset.view === 'grid' ? gridPageSize : listPageSize;
+    }
+
+    function getTotalPages() {
+      return Math.ceil(listItems.length / getActivePageSize());
+    }
+
+    function renderPage(page, shouldAnchor = true) {
+      const totalPages = getTotalPages();
+      currentPage = Math.min(Math.max(page, 1), totalPages);
+      listItems.forEach((item, index) => { item.hidden = Math.floor(index / listPageSize) + 1 !== currentPage; });
+      gridCards.forEach((card, index) => { card.hidden = Math.floor(index / gridPageSize) + 1 !== currentPage; });
+      previousButton.disabled = currentPage === 1;
+      nextButton.disabled = currentPage === totalPages;
+      pageStatus.textContent = `第 ${currentPage} 页，共 ${totalPages} 页`;
+      if (shouldAnchor) window.location.hash = 'archive-list';
+    }
+
+    function setView(nextView) {
+      view.dataset.view = nextView;
+      viewButtons.forEach((button) => {
+        const active = button.dataset.viewTarget === nextView;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+      renderPage(1, false);
+    }
+
+    function openDetails(itemKey) {
+      const item = archiveDetails[itemKey];
+      dialogImage.src = item.image;
+      dialogImage.alt = item.alt;
+      dialogTitle.textContent = item.title;
+      dialogNumber.textContent = item.number;
+      dialogDescription.textContent = item.description;
+      dialogDetails.innerHTML = item.details;
+      archiveDialog.showModal();
+      closeDialog.focus();
+    }
+
+    gridCards.forEach((card) => {
+      card.addEventListener('click', () => openDetails(card.dataset.item));
+      card.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openDetails(card.dataset.item);
+        }
+      });
+    });
+
+    closeDialog.addEventListener('click', () => archiveDialog.close());
+    archiveDialog.addEventListener('click', (event) => {
+      const rect = archiveDialog.getBoundingClientRect();
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) archiveDialog.close();
+    });
+
+    viewButtons.forEach((button) => button.addEventListener('click', () => setView(button.dataset.viewTarget)));
+    previousButton.addEventListener('click', () => renderPage(currentPage - 1));
+    nextButton.addEventListener('click', () => renderPage(currentPage + 1));
+    renderPage(1, false);
+
+    function updateBackToTopVisibility() {
+      backToTop.classList.toggle('is-visible', window.scrollY > window.innerHeight * .55);
+    }
+    window.addEventListener('scroll', updateBackToTopVisibility, { passive: true });
+    updateBackToTopVisibility();
+    backToTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  </script>
+</body>
+</html>
