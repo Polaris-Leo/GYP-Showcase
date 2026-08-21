@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="鸽一品角色周边与舰长礼物的收藏展示页。">
+  <link rel="icon" href="assets/gyp/favicon.png" type="image/png">
+  <title>鸽一品｜周边展厅</title>
+  <style>
+    :root {
+      --bg: oklch(1 0 0);
+      --surface: oklch(0.97 0 0);
+      --fg: oklch(0.28 0 0);
+      --muted: oklch(0.56 0 0);
+      --border: oklch(0.9 0 0);
+      --accent: oklch(0.53 0.12 257);
+      --display: "Noto Serif SC", "Songti SC", STSong, serif;
+      --body: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      --mono: ui-monospace, "Cascadia Mono", monospace;
+      --ease: cubic-bezier(.22, .61, .36, 1);
+      --page-x: clamp(20px, 3.3vw, 58px);
+    }
+
+    * { box-sizing: border-box; }
+    html { background: var(--bg); scroll-behavior: smooth; }
+    body { margin: 0; color: var(--fg); background: var(--bg); font-family: var(--body); overflow-x: hidden; }
+    button, a { font: inherit; }
+    button { color: inherit; }
+    a { color: inherit; text-decoration: none; }
+    ::selection { background: oklch(0.9 0.05 257); }
+
+    .site-header {
+      display: grid;
+      min-height: 88px;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: start;
+      gap: 24px;
+      padding: 24px var(--page-x) 0;
+      position: relative;
+      z-index: 5;
+    }
+    .brand { font-family: var(--mono); font-size: 14px; letter-spacing: .08em; line-height: 1.25; }
+    .header-meta { font-size: 12px; line-height: 1.4; color: var(--muted); text-align: center; }
+    .header-nav { display: flex; justify-content: flex-end; gap: 22px; font-size: 14px; }
+    .header-nav a { border-bottom: 1px solid transparent; transition: border-color .25s var(--ease); }
+    .header-nav a:hover, .header-nav a:focus-visible { border-color: var(--fg); outline: none; }
+
+    .hero {
+      min-height: min(720px, 76vh);
+      display: grid;
+      grid-template-columns: minmax(0, 1.13fr) minmax(280px, .87fr);
+      align-items: center;
+      gap: clamp(34px, 6vw, 112px);
+      padding: clamp(20px, 2vw, 40px) var(--page-x) 54px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+    .hero-copy { position: relative; z-index: 1; max-width: 820px; }
+    .kicker { margin: 0 0 18px; font-family: var(--mono); font-size: 11px; letter-spacing: .08em; color: var(--muted); }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 {
+      margin-bottom: 26px;
+      font-family: var(--display);
+      font-size: clamp(56px, 9.2vw, 148px);
+      font-weight: 700;
+      letter-spacing: -.075em;
+      line-height: .86;
+      max-width: 7.3em;
+    }
+    .hero-intro { max-width: 30em; margin-bottom: 32px; font-size: 16px; line-height: 1.7; }
+    .primary-action {
+      min-height: 48px;
+      border: 1px solid var(--accent);
+      padding: 0 18px;
+      background: var(--accent);
+      color: var(--bg);
+      cursor: pointer;
+      font-size: 13px;
+      transition: transform .25s var(--ease), background .25s var(--ease), color .25s var(--ease);
+    }
+    .primary-action:hover { transform: translateY(-2px); background: oklch(0.45 0.12 257); color: var(--bg); }
+    .primary-action:active { transform: translateY(0); }
+    .primary-action:focus-visible, .filter-button:focus-visible, .detail-link:focus-visible, .close-button:focus-visible, .header-nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+    .hero-image-wrap {
+      align-self: stretch;
+      min-height: 480px;
+      background: var(--surface);
+      overflow: hidden;
+      position: relative;
+    }
+    .hero-image-wrap::after {
+      content: "鸽一品 · 天空收藏";
+      position: absolute;
+      left: 15px;
+      bottom: 13px;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .05em;
+      color: var(--fg);
+      background: oklch(1 0 0 / .88);
+      padding: 5px 7px;
+    }
+    .hero-image { width: 100%; height: 100%; object-fit: cover; object-position: 52% 38%; display: block; transform: scale(1.04); transition: transform .8s var(--ease); }
+    .hero-image-wrap:hover .hero-image { transform: scale(1.08); }
+    .orbit { position: absolute; border: 1px solid oklch(0.28 0 0 / .14); border-radius: 50%; pointer-events: none; }
+    .orbit-a { width: 27vw; height: 8vw; right: 17vw; top: 19%; transform: rotate(-24deg); }
+    .orbit-b { width: 15vw; height: 5vw; left: 23%; bottom: 10%; transform: rotate(29deg); }
+
+    .subnav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 12px var(--page-x);
+      border-bottom: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .05em;
+    }
+    .subnav-left { color: var(--muted); }
+    .subnav-right { text-align: right; }
+
+    main { padding: 0 var(--page-x); }
+    .collection-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(240px, .58fr);
+      gap: 36px;
+      padding: clamp(70px, 10vw, 144px) 0 44px;
+    }
+    .collection-head h2 { margin: 0; font-family: var(--display); font-size: clamp(38px, 5.6vw, 76px); letter-spacing: -.065em; line-height: .98; }
+    .collection-head p { align-self: end; max-width: 33em; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+
+    .filters { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 22px; }
+    .filter-label { margin-right: 12px; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .05em; }
+    .filter-button { min-height: 36px; border: 1px solid transparent; background: transparent; padding: 0 10px; cursor: pointer; font-size: 12px; transition: border-color .25s var(--ease), background .25s var(--ease); }
+    .filter-button:hover { border-color: var(--border); background: var(--surface); }
+    .filter-button.is-active { border-color: var(--fg); }
+
+    .collection-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-left: 1px solid var(--border); }
+    .merch-card {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(190px, .85fr);
+      min-height: 430px;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      transform-style: preserve-3d;
+      transition: background .4s var(--ease), opacity .35s var(--ease), transform .35s var(--ease);
+    }
+    .merch-card.is-hidden { display: none; }
+    .merch-card:hover { background: var(--surface); }
+    .merch-visual { min-height: 100%; overflow: hidden; background: var(--surface); }
+    .merch-visual img { width: 100%; height: 100%; min-height: 430px; display: block; object-fit: cover; transition: transform .7s var(--ease); }
+    .merch-card:hover .merch-visual img { transform: scale(1.045); }
+    .merch-info { display: flex; flex-direction: column; padding: 17px 18px 16px; }
+    .merch-index { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .04em; }
+    .merch-info h3 { margin: auto 0 12px; font-family: var(--display); font-size: clamp(27px, 2.6vw, 43px); font-weight: 700; letter-spacing: -.055em; line-height: 1; }
+    .merch-meta { margin: 0 0 15px; font-size: 11px; line-height: 1.6; color: var(--muted); }
+    .merch-note { margin-bottom: 20px; font-size: 13px; line-height: 1.65; }
+    .detail-link { align-self: flex-start; margin-top: auto; border: 0; border-bottom: 1px solid var(--fg); padding: 0 0 3px; background: transparent; cursor: pointer; font-size: 12px; }
+    .detail-link:hover { border-color: var(--accent); }
+
+    .captain-note {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, .78fr);
+      gap: clamp(28px, 5vw, 78px);
+      align-items: end;
+      padding: clamp(85px, 12vw, 170px) 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .captain-note h2 { max-width: none; margin-bottom: 0; font-family: var(--display); font-size: clamp(42px, 5.4vw, 78px); letter-spacing: -.07em; line-height: .95; }
+    .captain-body { border-top: 1px solid var(--fg); padding-top: 12px; }
+    .captain-body p { max-width: 31em; margin-bottom: 25px; font-size: 15px; line-height: 1.8; }
+    .rule-list { margin: 0; padding: 0; list-style: none; font-family: var(--mono); font-size: 11px; line-height: 2; }
+    .rule-list li { border-bottom: 1px solid var(--border); padding: 8px 0; }
+    .rule-list span { color: var(--muted); }
+
+    footer { display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; padding: 16px var(--page-x) 24px; color: var(--muted); font-family: var(--mono); font-size: 10px; line-height: 1.4; }
+    footer span:last-child { text-align: right; }
+    .back-to-top { position: fixed; right: clamp(16px, 2vw, 30px); bottom: clamp(16px, 2vw, 30px); z-index: 10; width: 48px; min-height: 48px; border: 1px solid var(--fg); background: var(--bg); color: var(--fg); cursor: pointer; font-family: var(--mono); font-size: 11px; opacity: 0; pointer-events: none; transform: translateY(10px); transition: opacity .25s var(--ease), transform .25s var(--ease), background .25s var(--ease), color .25s var(--ease); }
+    .back-to-top.is-visible { opacity: 1; pointer-events: auto; transform: translateY(0); }
+    .back-to-top:hover { background: var(--fg); color: var(--bg); }
+    .back-to-top:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+    dialog { width: min(920px, calc(100vw - 28px)); border: 0; padding: 0; background: var(--bg); color: var(--fg); box-shadow: 0 24px 80px oklch(0.28 0 0 / .24); }
+    dialog::backdrop { background: oklch(0.28 0 0 / .38); backdrop-filter: blur(3px); }
+    .dialog-inner { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(260px, .95fr); min-height: 510px; }
+    .dialog-image { min-height: 510px; background: var(--surface); overflow: hidden; }
+    .dialog-image img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .dialog-copy { display: flex; flex-direction: column; padding: 19px; }
+    .close-button { align-self: flex-end; width: 38px; height: 38px; border: 1px solid var(--border); background: var(--bg); cursor: pointer; font-size: 20px; transition: background .25s var(--ease); }
+    .close-button:hover { background: var(--surface); }
+    .dialog-number { margin: auto 0 15px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+    .dialog-copy h2 { margin-bottom: 14px; font-family: var(--display); font-size: clamp(42px, 5vw, 70px); letter-spacing: -.07em; line-height: .95; }
+    .dialog-copy p { margin-bottom: 24px; font-size: 14px; line-height: 1.75; }
+    .dialog-details { border-top: 1px solid var(--border); font-family: var(--mono); font-size: 11px; line-height: 1.8; padding-top: 12px; }
+
+    .reveal { opacity: 0; transform: translateY(20px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
+    .reveal.is-visible { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 760px) {
+      .site-header { grid-template-columns: 1fr auto; }
+      .header-meta { display: none; }
+      .hero { min-height: auto; grid-template-columns: 1fr; padding-top: 85px; padding-bottom: 30px; }
+      h1 { font-size: clamp(50px, 13.8vw, 84px); max-width: none; letter-spacing: -.09em; }
+      .captain-note h2 { max-width: none; font-size: clamp(37px, 9.8vw, 60px); letter-spacing: -.085em; }
+      .hero-image-wrap { min-height: 500px; }
+      .orbit { display: none; }
+      .collection-head, .captain-note { grid-template-columns: 1fr; }
+      .collection-grid { grid-template-columns: 1fr; }
+      .merch-card { min-height: 0; grid-template-columns: 1.08fr .92fr; }
+      .merch-visual img { min-height: 360px; }
+      .merch-info h3 { font-size: 32px; }
+      footer { grid-template-columns: 1fr; gap: 7px; }
+      footer span:last-child { text-align: left; }
+      .dialog-inner { grid-template-columns: 1fr; }
+      .dialog-image { min-height: 300px; max-height: 48vh; }
+      .dialog-copy { min-height: 380px; }
+    }
+    @media (max-width: 470px) {
+      .header-nav { gap: 10px; }
+      .subnav { align-items: flex-start; flex-direction: column; }
+      .subnav-right { text-align: left; }
+      .filters { flex-wrap: wrap; }
+      .filter-label { width: 100%; }
+      .merch-card { grid-template-columns: 1fr; }
+      .merch-visual img { min-height: 390px; max-height: 510px; }
+      .merch-info { min-height: 285px; }
+      .hero-image-wrap { min-height: 430px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header" data-od-id="site-header">
+    <a href="#top" class="brand" data-od-id="brand-home">鸽一品<br>GEYIPIN</a>
+    <p class="header-meta">角色周边与舰长礼物<br>演示档案 2026</p>
+    <nav class="header-nav" aria-label="页面导航" data-od-id="primary-navigation">
+      <a href="#collection" data-od-id="nav-collection">收藏</a>
+      <a href="history-archive.html" data-od-id="nav-history">历史展厅</a>
+      <a href="#captain" data-od-id="nav-captain">舰长礼物</a>
+    </nav>
+  </header>
+
+  <section class="hero" id="top" data-od-id="hero-section">
+    <div class="orbit orbit-a" aria-hidden="true"></div>
+    <div class="orbit orbit-b" aria-hidden="true"></div>
+    <div class="hero-copy reveal">
+      <p class="kicker">ARCHIVE 01–04 / 示例展厅</p>
+      <h1 data-od-id="hero-heading">把一片天空<br>带回家。</h1>
+      <p class="hero-intro">这里收录与鸽一品角色故事有关的周边设想：可以收藏、可以相赠，也可以在未来成为真实的发售企划。每一件都有它的画面、来处与说明。</p>
+      <button class="primary-action" type="button" data-jump="collection" data-od-id="hero-primary-cta">浏览本期展厅</button>
+    </div>
+    <figure class="hero-image-wrap reveal" data-od-id="hero-artwork">
+      <img class="hero-image" src="assets/gyp/hero-sky.png" alt="鸽一品与白鸽在云层和蓝天之间的角色原画" fetchpriority="high">
+    </figure>
+  </section>
+
+  <div class="subnav" data-od-id="collection-status">
+    <span class="subnav-left">四件示例物品 / 内容与状态可编辑</span>
+    <span class="subnav-right">向下浏览 ↓</span>
+  </div>
+
+  <main>
+    <section id="collection" data-od-id="collection-section">
+      <div class="collection-head reveal">
+        <h2 data-od-id="collection-heading">周边清单<br>× 04</h2>
+        <p>参考作品集的编排方式，我们让角色画面和物品信息成为同等重要的阅读对象。点击任意条目，可在不离开页面的情况下查看完整说明。</p>
+      </div>
+
+      <div class="filters" role="toolbar" aria-label="筛选物品" data-od-id="collection-filters">
+        <span class="filter-label">筛选</span>
+        <button class="filter-button is-active" type="button" data-filter="all" aria-pressed="true" data-od-id="filter-all">全部</button>
+        <button class="filter-button" type="button" data-filter="gift" aria-pressed="false" data-od-id="filter-gift">舰长礼物</button>
+        <button class="filter-button" type="button" data-filter="sale" aria-pressed="false" data-od-id="filter-sale">收藏企划</button>
+      </div>
+
+      <div class="collection-grid" data-od-id="merch-grid">
+        <article class="merch-card reveal" data-type="gift" data-item="sky" data-od-id="merch-card-sky-pass">
+          <div class="merch-visual"><img src="assets/gyp/hero-sky.png" alt="蓝天与白鸽主题的鸽一品角色原画" loading="lazy"></div>
+          <div class="merch-info">
+            <div class="merch-index"><span>01 / GIFT</span><span>舰长礼物</span></div>
+            <h3>云上通行证</h3>
+            <p class="merch-meta">设想：入会纪念票卡／无售价／限时寄送</p>
+            <p class="merch-note">把晴空、白鸽和长长的缎带压进一张可被收藏的通行证，留给一起飞过这段旅程的人。</p>
+            <button class="detail-link" type="button" data-od-id="detail-sky-pass">查看物品说明</button>
+          </div>
+        </article>
+
+        <article class="merch-card reveal" data-type="gift" data-item="plush" data-od-id="merch-card-pigeon-plush">
+          <div class="merch-visual"><img src="assets/gyp/pigeon-plush.png" alt="鸽一品抱着小鸟玩偶的角色原画" loading="lazy"></div>
+          <div class="merch-info">
+            <div class="merch-index"><span>02 / GIFT</span><span>舰长礼物</span></div>
+            <h3>云团抱枕</h3>
+            <p class="merch-meta">设想：异形抱枕／无售价／季度礼物</p>
+            <p class="merch-note">用画面中被拥抱的小鸟做成软软的轮廓，作为桌面和沙发上的陪伴物。</p>
+            <button class="detail-link" type="button" data-od-id="detail-pigeon-plush">查看物品说明</button>
+          </div>
+        </article>
+
+        <article class="merch-card reveal" data-type="sale" data-item="birthday" data-od-id="merch-card-birthday-box">
+          <div class="merch-visual"><img src="assets/gyp/birthday-set.png" alt="生日主题的鸽一品角色原画" loading="lazy"></div>
+          <div class="merch-info">
+            <div class="merch-index"><span>03 / PLAN</span><span>收藏企划</span></div>
+            <h3>生日小夜灯</h3>
+            <p class="merch-meta">设想：亚克力夜灯／待定／生日限定</p>
+            <p class="merch-note">生日画面的糖果色被裁成一盏小灯；点亮时，桌面像刚刚拆开一份礼物。</p>
+            <button class="detail-link" type="button" data-od-id="detail-birthday-box">查看物品说明</button>
+          </div>
+        </article>
+
+        <article class="merch-card reveal" data-type="sale" data-item="cafe" data-od-id="merch-card-cafe-stand">
+          <div class="merch-visual"><img src="assets/gyp/galaxy-cafe.png" alt="端着料理的鸽一品角色原画" loading="lazy"></div>
+          <div class="merch-info">
+            <div class="merch-index"><span>04 / PLAN</span><span>收藏企划</span></div>
+            <h3>星屿立牌</h3>
+            <p class="merch-meta">设想：双层亚克力／待定／常规收藏</p>
+            <p class="merch-note">前景是认真端盘的鸽一品，背面藏着忙碌的小白鸽；从不同角度看，像一段有声音的餐桌故事。</p>
+            <button class="detail-link" type="button" data-od-id="detail-cafe-stand">查看物品说明</button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="captain-note reveal" id="captain" data-od-id="captain-section">
+      <h2 data-od-id="captain-heading">礼物不是门槛，<br>是一起留下的记号。</h2>
+      <div class="captain-body">
+        <p>舰长礼物会和售卖周边使用不同的标识。这个示例页将状态、获得方式与内容说明放在每张图旁，避免一张好看的图，却没有告诉人们它究竟是什么。</p>
+        <ul class="rule-list" data-od-id="captain-rules">
+          <li><span>01</span>　发售状态和实际库存均为示例，尚未开放购买</li>
+          <li><span>02</span>　角色原画来自已提供的本地素材，用于本页展示</li>
+          <li><span>03</span>　后续可替换为商品链接、发售时间与实物照片</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <button class="back-to-top" type="button" aria-label="回到页面顶端" data-od-id="back-to-top">顶部 ↑</button>
+
+  <footer data-od-id="site-footer">
+    <span>© 2026 鸽一品</span>
+    <span>角色周边展厅 / DEMO</span>
+    <span>设计语言参考：独立作品集的归档节奏</span>
+  </footer>
+
+  <dialog id="merch-dialog" aria-labelledby="dialog-title" data-od-id="merch-detail-dialog">
+    <div class="dialog-inner">
+      <div class="dialog-image"><img id="dialog-image" src="" alt=""></div>
+      <div class="dialog-copy">
+        <button class="close-button" type="button" aria-label="关闭说明" data-od-id="close-detail-dialog">×</button>
+        <p class="dialog-number" id="dialog-number"></p>
+        <h2 id="dialog-title"></h2>
+        <p id="dialog-description"></p>
+        <div class="dialog-details" id="dialog-details"></div>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    const merchandise = {
+      sky: {
+        number: '01 / GIFT', title: '云上通行证', image: 'assets/gyp/hero-sky.png', alt: '蓝天与白鸽主题的鸽一品角色原画',
+        description: '建议使用雾面票卡和局部珠光工艺，画面边缘保留白鸽与飘带，让卡片在小尺寸里仍然有很强的角色辨识度。',
+        details: '获得方式：舰长礼物<br>状态：示例企划，尚未开放<br>建议规格：85 × 54 mm'
+      },
+      plush: {
+        number: '02 / GIFT', title: '云团抱枕', image: 'assets/gyp/pigeon-plush.png', alt: '鸽一品抱着小鸟玩偶的角色原画',
+        description: '围绕被拥在掌心的小鸟设计异形外轮廓，正面延续柔软的云雾配色，背面可配置鸽一品的签名字样。',
+        details: '获得方式：舰长礼物<br>状态：示例企划，尚未开放<br>建议规格：约 32 cm 高'
+      },
+      birthday: {
+        number: '03 / PLAN', title: '生日小夜灯', image: 'assets/gyp/birthday-set.png', alt: '生日主题的鸽一品角色原画',
+        description: '以蛋糕、蝴蝶结和欢庆色块为切面，保留光线穿过透明板材时的层次。适合做成每年一次的生日纪念物。',
+        details: '获得方式：收藏企划<br>状态：示例企划，尚未开放<br>建议规格：底座宽约 12 cm'
+      },
+      cafe: {
+        number: '04 / PLAN', title: '星屿立牌', image: 'assets/gyp/galaxy-cafe.png', alt: '端着料理的鸽一品角色原画',
+        description: '使用前后两层透明板材制造景深：前层是鸽一品和料理，后层是飞翔的小白鸽与餐厅光影。',
+        details: '获得方式：收藏企划<br>状态：示例企划，尚未开放<br>建议规格：A6 以内，双层结构'
+      }
+    };
+
+    const dialog = document.querySelector('#merch-dialog');
+    const dialogImage = document.querySelector('#dialog-image');
+    const dialogTitle = document.querySelector('#dialog-title');
+    const dialogNumber = document.querySelector('#dialog-number');
+    const dialogDescription = document.querySelector('#dialog-description');
+    const dialogDetails = document.querySelector('#dialog-details');
+    const closeDialog = document.querySelector('.close-button');
+    const backToTop = document.querySelector('.back-to-top');
+
+    function openDetails(itemKey) {
+      const item = merchandise[itemKey];
+      dialogImage.src = item.image;
+      dialogImage.alt = item.alt;
+      dialogTitle.textContent = item.title;
+      dialogNumber.textContent = item.number;
+      dialogDescription.textContent = item.description;
+      dialogDetails.innerHTML = item.details;
+      dialog.showModal();
+      closeDialog.focus();
+    }
+
+    document.querySelectorAll('.merch-card').forEach((card) => {
+      const open = () => openDetails(card.dataset.item);
+      card.querySelector('.detail-link').addEventListener('click', open);
+      card.addEventListener('dblclick', open);
+      card.addEventListener('pointermove', (event) => {
+        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        const rect = card.getBoundingClientRect();
+        const x = (event.clientX - rect.left) / rect.width - .5;
+        const y = (event.clientY - rect.top) / rect.height - .5;
+        card.style.transform = `perspective(900px) rotateY(${x * 1.4}deg) rotateX(${y * -1.1}deg)`;
+      });
+      card.addEventListener('pointerleave', () => { card.style.transform = ''; });
+    });
+
+    closeDialog.addEventListener('click', () => dialog.close());
+    dialog.addEventListener('click', (event) => {
+      const rect = dialog.getBoundingClientRect();
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
+    });
+
+    document.querySelectorAll('.filter-button').forEach((button) => {
+      button.addEventListener('click', () => {
+        const filter = button.dataset.filter;
+        document.querySelectorAll('.filter-button').forEach((other) => {
+          const active = other === button;
+          other.classList.toggle('is-active', active);
+          other.setAttribute('aria-pressed', String(active));
+        });
+        document.querySelectorAll('.merch-card').forEach((card) => {
+          card.classList.toggle('is-hidden', filter !== 'all' && card.dataset.type !== filter);
+        });
+      });
+    });
+
+    document.querySelector('[data-jump="collection"]').addEventListener('click', () => {
+      document.querySelector('#collection').getBoundingClientRect().top + window.scrollY;
+      window.location.hash = 'collection';
+    });
+
+    function updateBackToTopVisibility() {
+      backToTop.classList.toggle('is-visible', window.scrollY > window.innerHeight * .55);
+    }
+    window.addEventListener('scroll', updateBackToTopVisibility, { passive: true });
+    updateBackToTopVisibility();
+    backToTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: .12 });
+    document.querySelectorAll('.reveal').forEach((element) => observer.observe(element));
+  </script>
+</body>
+</html>
