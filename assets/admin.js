@@ -342,8 +342,7 @@ const collections = {
     confirmWord: '条目',
     fields: [
       { key: 'title', label: '物品名称', kind: 'text', half: true },
-      { key: 'date', label: '日期', kind: 'year-month', half: true,
-        hint: '直接选择年月；展示页仍会分两行显示年份与月份。' },
+      { key: 'date', label: '日期', kind: 'year-month', half: true },
       { key: 'category', label: '类别', kind: 'choice', choice: 'archive-category',
         hint: '选项就是其它条目正在用的类别；下拉的最后一项「＋ 新增类别」可以现场加一个，加完会立刻用在本条目上，并出现在其它条目的下拉里。<strong>没有任何条目在用的类别会自动从下拉里消失。</strong>同时用于列表的「类别：…」与表格视图的标签。' },
       { key: 'desc', label: '简介', kind: 'textarea', grow: true },
@@ -373,7 +372,11 @@ function getOrder(name) {
 }
 
 // ── 日期：年 / 月 两个下拉，存回展示页要求的 "YYYY\nMM" ──
-const YM_FIRST_YEAR = 2020;
+// 年份范围写死 2022–2030。注意这是硬边界：落在范围外的旧数据在下拉里找不到
+// 对应项，<select> 的 value 会变成空串、看起来像没填，所以要收录更早或更晚的
+// 条目，得先把这两个常量挪开，光改数据不行。
+const YM_FIRST_YEAR = 2022;
+const YM_LAST_YEAR = 2030;
 
 function buildYmSelect(path, part) {
   const sel = document.createElement('select');
@@ -388,8 +391,7 @@ function buildYmSelect(path, part) {
     sel.appendChild(opt);
   };
   if (part === 'year') {
-    const last = new Date().getFullYear() + 2;
-    for (let y = YM_FIRST_YEAR; y <= last; y++) addOpt(String(y), y + ' 年');
+    for (let y = YM_FIRST_YEAR; y <= YM_LAST_YEAR; y++) addOpt(String(y), y + ' 年');
   } else {
     for (let m = 1; m <= 12; m++) addOpt(pad2(m), pad2(m) + ' 月');
   }
