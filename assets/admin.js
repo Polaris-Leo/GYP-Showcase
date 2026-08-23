@@ -358,8 +358,7 @@ function attachUploaders(scope) {
     picker.type = 'file';
     picker.accept = UPLOAD_TYPES.join(',');
     picker.className = 'upload-file';
-    // 原生 file 控件样式无法统一，藏起来用按钮代劳；
-    // 但不能用 hidden/display:none 之外的手段让它离开无障碍树，所以给它一个 label 关联。
+    // 原生 file 控件样式无法统一，藏起来用按钮代劳；按钮点击时触发 picker.click()。
     picker.hidden = true;
 
     const btn = document.createElement('button');
