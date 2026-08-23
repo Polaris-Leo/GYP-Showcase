@@ -182,6 +182,8 @@ footer         →  padding: 16px var(--page-x) 24px;  同样 1fr auto 1fr
 | `.preview-card .image-preview` | `aspect-ratio: 1240 / 1867`，和首页主视觉同比例；`object-fit: contain` 完整显示 |
 | `.field-card.full` | 独占一整行的字段卡（`flex: 1 1 100%`）。默认 `.field-card` 是 `flex: 1 1 260px`，会自动与邻卡并排；长文本字段用 `.full` |
 | `.field-inline` | 两个 `select` 并排占一行（年/月），`flex: 1 1 0; min-width: 0` |
+| `.field-choice` + `.choice-new` | 可增选项的下拉：上排「`select` + ＋新增」，下排折叠的输入行。`.choice-new` 用 class 设了 `display: flex`，会盖掉 `[hidden]` 的 UA `display: none`，**必须显式补一条 `.choice-new[hidden] { display: none }`**，否则新增行永远展开 |
+| `.field-parts` + `.field-part` | 一个字符串字段拆成多段各自选（编号/类型）。`grid-template-columns: repeat(auto-fit, minmax(210px, 1fr))` 自动在宽栏排两列、窄栏退一列，不写断点；每段上方一个 `.field-part-label` 小标题 |
 | `.item-block` | 一个可增删条目 = 标题行（名称 + key + 操作按钮）+ 一个 `.field-group` |
 | `.list-toolbar` | 虚线框统计条，右侧 `margin-left: auto` 顶出「添加」按钮 |
 | `.item-empty` | 虚线框空态，文案写清下一步动作 |
@@ -362,11 +364,17 @@ if (!Object.keys(overrides).length) return; // KV 是空的 → 同上
 4. 在对应 `collections[...].fields` 数组里加一项：
 
 ```js
-{ key: 'category', label: '类别', kind: 'text',
+{ key: 'category', label: '类别', kind: 'choice', choice: 'archive-category',
   hint: '同时用于列表的「类别：…」与表格视图的标签。' }
 ```
 
-`kind` 目前支持 `text` / `textarea` / `select` / `year-month`；`half: true` 表示与相邻字段共占一行，`grow: true` 表示吸收剩余高度，`preview: true` 表示右侧出大图预览。**新字段优先复用这几个 kind，不要新造控件。**
+`kind` 目前支持 `text` / `textarea` / `select` / `year-month` / `choice` / `parts`；`half: true` 表示与相邻字段共占一行，`grow: true` 表示吸收剩余高度，`preview: true` 表示右侧出大图预览。**新字段优先复用这几个 kind，不要新造控件。**
+
+**`select` 与 `choice` 怎么选：** 值有没有可能变多。`select` 是闭集，`options` 写死在字段定义里——只有当展示页也**按值分支**时才用它（例如 `merch.type`：首页的筛选按钮和 `GIFT`/`PLAN` 后缀映射是硬编码的，第三个值首页认不出来，会被静默当成 `gift`，所以它必须闭）。展示页只是把值当文本显示时用 `choice`，让用户能自己加。
+
+**`choice` 的选项表不落库**，而是「种子 ∪ 当前有条目正在用的值」实时推导（`choiceGroups` + `collectChoiceValues`）。所以「新增选项」＝「把新值写进当前条目」的副产物：它立刻出现在同组其它条目的下拉里，而输错了、没人在用的值下次渲染就自己消失——不用加删除选项的 UI，也不会在数据里攒脏选项。种子只取默认内容里真实出现过的值，外加项目既有的占位约定（`待补充` / `待定`）。
+
+**`parts` 用于「一个字符串字段其实是几段拼的」**（`merch.meta` ＝ `状态：品类／售价／获得方式`）。每段一个 `choice` 下拉，`data-part=段序号`，改动时由 `readParts` 读齐同组各段再拼回整串——和 `year-month` 两个下拉共写一个 `date` 是同一套思路。写这类编解码器时**拆和拼必须是无损往返**，否则用户一动下拉就会悄悄改坏原值；`metaParts`/`joinMeta` 靠两条保护做到这点：多出来的段全部并进最后一段（不丢字），结尾的空段拼回去时去掉（没有分隔符的自由文本不会被补成 `随便写的／／`）。另外**段内容里必须禁止出现分隔符**（`partInputError`），否则重拼后会多出一段、下次读回来整体错位。
 
 ### 新增一个可增删的集合
 

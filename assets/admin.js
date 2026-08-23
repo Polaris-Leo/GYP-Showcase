@@ -207,6 +207,11 @@ function hydrateForm(scope) {
   (scope || document).querySelectorAll('[data-field]').forEach((input) => {
     const key = input.dataset.field;
     const value = resolveKey(key);
+    if (input.dataset.choice) {
+      // 分段字段（data-part）取整串里的对应一段，其余照原样回填
+      setChoiceSelect(input, input.dataset.part == null ? value : metaParts(value)[Number(input.dataset.part)]);
+      return;
+    }
     if (input.dataset.ym) {
       setYmSelect(input, ymParts(value)[input.dataset.ym]);
       return;
@@ -277,6 +282,12 @@ function bindFields(scope) {
         if (wrap) wrap.querySelectorAll('select').forEach((s) => s.classList.add('is-changed'));
         return;
       }
+      if (input.dataset.part != null) {
+        // 一段变了要把同组各段读齐重拼，不能只写自己那一段
+        updateValue(input.dataset.field, readParts(input));
+        input.classList.add('is-changed');
+        return;
+      }
       updateValue(input.dataset.field, input.value);
       input.classList.add('is-changed');
       updatePreview(input);
@@ -299,9 +310,16 @@ const collections = {
     confirmWord: '物品',
     fields: [
       { key: 'title', label: '物品名称', kind: 'text', half: true },
-      { key: 'meta', label: '编号/类型', kind: 'text', half: true },
+      { key: 'meta', label: '编号/类型', kind: 'parts',
+        parts: [
+          { label: '状态', choice: 'merch-meta-state' },
+          { label: '品类', choice: 'merch-meta-kind' },
+          { label: '售价', choice: 'merch-meta-price' },
+          { label: '获得方式', choice: 'merch-meta-how' }
+        ],
+        hint: '首页卡片上那行小字，按「<code>状态：品类／售价／获得方式</code>」拼出来。四段都能直接选，选项来自其它物品正在用的值；没有合适的就点「＋ 新增…」现场加一个。<strong>留空的尾段会被省略</strong>，所以只填前两段也不会拼出多余的斜杠。' },
       { key: 'type', label: '展厅分类', kind: 'select',
-        hint: '决定首页筛选归类，以及卡片序号后缀（GIFT / PLAN）。',
+        hint: '决定首页筛选归类，以及卡片序号后缀（GIFT / PLAN）。<strong>这一项只有这两个值，不能自行新增</strong>：首页的筛选按钮和后缀映射是写死在展示页里的，第三个分类首页认不出来，会被当成「舰长礼物」处理。要加分类得连首页一起改。',
         options: [['gift', '舰长礼物'], ['sale', '收藏企划']] },
       { key: 'note', label: '卡片简介', kind: 'textarea', grow: true },
       { key: 'image', label: '图片链接', kind: 'text', preview: true,
@@ -326,8 +344,8 @@ const collections = {
       { key: 'title', label: '物品名称', kind: 'text', half: true },
       { key: 'date', label: '日期', kind: 'year-month', half: true,
         hint: '直接选择年月；展示页仍会分两行显示年份与月份。' },
-      { key: 'category', label: '类别', kind: 'text',
-        hint: '同时用于列表的「类别：…」与表格视图的标签。' },
+      { key: 'category', label: '类别', kind: 'choice', choice: 'archive-category',
+        hint: '从已有类别里直接选；没有合适的就点「＋ 新增类别」现场加一个，加完会立刻用在本条目上，并出现在其它条目的下拉里。同时用于列表的「类别：…」与表格视图的标签。' },
       { key: 'desc', label: '简介', kind: 'textarea', grow: true },
       { key: 'image', label: '图片链接', kind: 'text', preview: true,
         hint: '填图床完整链接。B 站装扮素材的链接＝<code>https://i0.hdslb.com/bfs/garb/open/</code> ＋ 图片文件名。' }
@@ -402,6 +420,249 @@ function readYm(sel) {
   return (y ? y.value : '') + '\n' + (m ? m.value : '');
 }
 
+// ── 「编号/类型」的拆解：形如「状态：品类／售价／获得方式」 ──
+// 拆和拼必须是无损的往返，否则用户一动下拉就会悄悄改坏原来的字符串。
+// 两个保护：多出来的段全部并进最后一段（不丢字），结尾的空段拼回去时去掉
+// （这样没有分隔符的自由文本不会被补成「随便写的／／」）。
+const META_SEP = '／';
+const META_COLON = '：';
+
+function metaParts(value) {
+  const raw = String(value == null ? '' : value);
+  const at = raw.indexOf(META_COLON);
+  const state = at >= 0 ? raw.slice(0, at).trim() : '';
+  const bits = (at >= 0 ? raw.slice(at + 1) : raw).split(META_SEP);
+  return [
+    state,
+    (bits[0] || '').trim(),
+    (bits[1] || '').trim(),
+    bits.slice(2).join(META_SEP).trim()
+  ];
+}
+
+function joinMeta(parts) {
+  const tail = [parts[1] || '', parts[2] || '', parts[3] || ''];
+  while (tail.length && !tail[tail.length - 1]) tail.pop();
+  const body = tail.join(META_SEP);
+  return parts[0] ? parts[0] + META_COLON + body : body;
+}
+
+// ── 可增选项的下拉：选项表不单独存，直接从「有哪些条目正在用这个值」推导 ──
+// 这样「新增选项」就是「把新值写进当前条目」的副产物：它立刻出现在同组其它条目的
+// 下拉里；而如果输错了、没有任何条目在用它，下次渲染时它自己就消失了，
+// 不会在数据里攒下一堆删不掉的脏选项。种子只取默认内容里真实出现过的值。
+const dedupeList = (list) => list.filter((v, i) => v && list.indexOf(v) === i);
+
+// derive 可选：字段值本身不是选项时（例如 meta 要取其中一段），用它抽出选项文本
+function collectChoiceValues(source, section, orderKey, key, derive) {
+  const sec = source && source[section];
+  if (!sec || typeof sec !== 'object') return [];
+  const order = Array.isArray(sec[orderKey]) ? sec[orderKey] : [];
+  return dedupeList(order.map((id) => {
+    const item = sec[id];
+    const val = item && typeof item === 'object' ? item[key] : undefined;
+    const raw = val == null ? '' : String(val);
+    return derive ? String(derive(raw) || '').trim() : raw.trim();
+  }));
+}
+
+// meta 四段各自一个选项组：种子从默认内容里真实出现过的段值推导，
+// 再补上本项目既有的占位约定，保证空物品也能选到东西。
+function metaSeed(index, extra) {
+  return dedupeList(
+    collectChoiceValues(nestedDefaults, 'home', 'merchOrder', 'meta', (v) => metaParts(v)[index])
+      .concat(extra || [])
+  );
+}
+
+const choiceGroups = {
+  'archive-category': {
+    section: 'archive',
+    orderKey: 'itemOrder',
+    key: 'category',
+    // '待补充' 是本项目既有的占位约定（展示页写作「待补资料」），保留成常驻选项
+    seed: dedupeList(collectChoiceValues(nestedDefaults, 'archive', 'itemOrder', 'category').concat('待补充')),
+    addLabel: '新增类别',
+    placeholder: '输入新的类别，例如「亚克力挂件」'
+  },
+  'merch-meta-state': {
+    section: 'home', orderKey: 'merchOrder', key: 'meta',
+    derive: (v) => metaParts(v)[0],
+    seed: metaSeed(0, ['设想']),
+    addLabel: '新增状态',
+    placeholder: '输入新的状态，例如「已开售」'
+  },
+  'merch-meta-kind': {
+    section: 'home', orderKey: 'merchOrder', key: 'meta',
+    derive: (v) => metaParts(v)[1],
+    seed: metaSeed(1, ['待补充']),
+    addLabel: '新增品类',
+    placeholder: '输入新的品类，例如「金属徽章」'
+  },
+  'merch-meta-price': {
+    section: 'home', orderKey: 'merchOrder', key: 'meta',
+    derive: (v) => metaParts(v)[2],
+    seed: metaSeed(2, ['待定']),
+    addLabel: '新增售价',
+    placeholder: '输入新的售价说明，例如「¥68」'
+  },
+  'merch-meta-how': {
+    section: 'home', orderKey: 'merchOrder', key: 'meta',
+    derive: (v) => metaParts(v)[3],
+    seed: metaSeed(3, ['待定']),
+    addLabel: '新增方式',
+    placeholder: '输入新的获得方式，例如「线下会场限定」'
+  }
+};
+
+function choiceOptions(groupName) {
+  const g = choiceGroups[groupName];
+  if (!g) return [];
+  return dedupeList(g.seed.concat(collectChoiceValues(data, g.section, g.orderKey, g.key, g.derive)));
+}
+
+function paintChoiceOptions(sel) {
+  sel.textContent = '';
+  choiceOptions(sel.dataset.choice).forEach((v) => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    sel.appendChild(opt);
+  });
+}
+
+// 数据里的值不在选项表里（导入的 JSON、或值为空）时就地补一个并选中，
+// 绝不静默把用户已有的值改写成第一个选项
+function setChoiceSelect(sel, raw) {
+  const want = String(raw == null ? '' : raw);
+  if (![...sel.options].some((o) => o.value === want)) {
+    const opt = document.createElement('option');
+    opt.value = want;
+    opt.textContent = want || '—（未填写）';
+    sel.insertBefore(opt, sel.firstChild);
+  }
+  sel.value = want;
+}
+
+function buildChoiceControl(field, path) {
+  const g = choiceGroups[field.choice];
+  const wrap = document.createElement('div');
+  wrap.className = 'field-choice';
+
+  const row = document.createElement('div');
+  row.className = 'field-inline';
+  const sel = document.createElement('select');
+  sel.dataset.field = path;
+  sel.dataset.type = 'text';
+  sel.dataset.choice = field.choice;
+  sel.setAttribute('aria-label', field.label);
+  paintChoiceOptions(sel);
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'btn btn-sm';
+  toggle.dataset.choiceToggle = '1';
+  toggle.textContent = '＋ ' + g.addLabel;
+  toggle.setAttribute('aria-expanded', 'false');
+  row.append(sel, toggle);
+
+  const panel = document.createElement('div');
+  panel.className = 'choice-new';
+  panel.hidden = true;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = g.placeholder;
+  input.dataset.choiceInput = '1';
+  input.setAttribute('aria-label', g.addLabel);
+  const commit = document.createElement('button');
+  commit.type = 'button';
+  commit.className = 'btn btn-sm btn-primary';
+  commit.dataset.choiceCommit = '1';
+  commit.textContent = '加入并选用';
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'btn btn-sm';
+  cancel.dataset.choiceCancel = '1';
+  cancel.textContent = '取消';
+  panel.append(input, commit, cancel);
+
+  wrap.append(row, panel);
+  return wrap;
+}
+
+// 把四个可增选项下拉拼成一个字段：每个下拉带 data-part=段序号，
+// 写回时由 readParts 读齐同一组的所有段再拼成完整字符串（和 year-month 同一套思路）。
+function buildPartsControl(field, path) {
+  const wrap = document.createElement('div');
+  wrap.className = 'field-parts';
+  field.parts.forEach((p, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'field-part';
+    const lab = document.createElement('span');
+    lab.className = 'field-part-label';
+    lab.textContent = p.label;
+    const ctrl = buildChoiceControl({ label: field.label + ' · ' + p.label, choice: p.choice }, path);
+    ctrl.querySelector('select').dataset.part = String(i);
+    cell.append(lab, ctrl);
+    wrap.appendChild(cell);
+  });
+  return wrap;
+}
+
+function readParts(sel) {
+  const wrap = sel.closest('.field-parts');
+  const parts = ['', '', '', ''];
+  (wrap ? [...wrap.querySelectorAll('select[data-part]')] : [sel]).forEach((s) => {
+    parts[Number(s.dataset.part)] = s.value;
+  });
+  return joinMeta(parts);
+}
+
+// 新选项里混进分隔符会让重拼后的字符串多出一段，下次读回来就整体错位。
+// 分隔符只在 join 时由代码写入，段内容里一律不允许出现。
+function partInputError(sel, value) {
+  if (sel.dataset.part == null) return '';
+  if (value.indexOf(META_SEP) >= 0) return '这一段不能含「' + META_SEP + '」，它是各段之间的分隔符';
+  if (sel.dataset.part === '0' && value.indexOf(META_COLON) >= 0) return '「状态」不能含「' + META_COLON + '」';
+  return '';
+}
+
+function openChoicePanel(wrap) {
+  const input = wrap.querySelector('[data-choice-input]');
+  wrap.querySelector('.choice-new').hidden = false;
+  wrap.querySelector('[data-choice-toggle]').setAttribute('aria-expanded', 'true');
+  input.value = '';
+  input.focus();
+}
+
+function closeChoicePanel(wrap) {
+  wrap.querySelector('.choice-new').hidden = true;
+  wrap.querySelector('[data-choice-toggle]').setAttribute('aria-expanded', 'false');
+  wrap.querySelector('select').focus();
+}
+
+function commitChoice(wrap) {
+  const sel = wrap.querySelector('select');
+  const input = wrap.querySelector('[data-choice-input]');
+  const value = input.value.trim();
+  if (!value) { input.focus(); showSaveStatus('请先输入选项名称'); return; }
+  const err = partInputError(sel, value);
+  if (err) { input.focus(); showSaveStatus(err); return; }
+  // 先把新值落到这个下拉上：分段字段要靠 readParts 读到它才能拼出完整字符串
+  setChoiceSelect(sel, value);
+  // 再写进数据：走和手动选择完全相同的链路（排队保存）。
+  // 必须先写，choiceOptions 才能把这个新值推导出来。
+  updateValue(sel.dataset.field, sel.dataset.part == null ? value : readParts(sel));
+  sel.classList.add('is-changed');
+  // 同组所有下拉一起重绘，新选项在每个下拉里的排序保持一致
+  document.querySelectorAll('select[data-choice="' + sel.dataset.choice + '"]').forEach((other) => {
+    const keep = other === sel ? value : other.value;
+    paintChoiceOptions(other);
+    setChoiceSelect(other, keep);
+  });
+  closeChoicePanel(wrap);
+  showSaveStatus('已加入选项「' + value + '」');
+}
+
 function buildControl(field, path) {
   let el;
   if (field.kind === 'year-month') {
@@ -410,6 +671,14 @@ function buildControl(field, path) {
     el.className = 'field-inline';
     el.append(buildYmSelect(path, 'year'), buildYmSelect(path, 'month'));
     return el;
+  }
+  if (field.kind === 'choice') {
+    // 复合控件：下拉 + 折叠的「新增选项」输入行
+    return buildChoiceControl(field, path);
+  }
+  if (field.kind === 'parts') {
+    // 复合控件：多个可增选项下拉共同写入同一个字符串字段
+    return buildPartsControl(field, path);
   }
   if (field.kind === 'select') {
     el = document.createElement('select');
@@ -612,6 +881,28 @@ document.querySelector('.admin-content').addEventListener('click', (event) => {
   if (event.target.closest('[data-item-remove]')) { removeItem(name, id); return; }
   const move = event.target.closest('[data-item-move]');
   if (move) moveItem(name, id, move.dataset.itemMove === 'up' ? -1 : 1);
+});
+
+// 「＋ 新增选项」的展开／提交／取消。单独挂一个监听：它和上面的增删排序互不相干，
+// 且新增行里的输入框故意不带 data-field，不会被 bindFields 绑上、也不会写进数据。
+document.querySelector('.admin-content').addEventListener('click', (event) => {
+  const wrap = event.target.closest('.field-choice');
+  if (!wrap) return;
+  if (event.target.closest('[data-choice-toggle]')) {
+    if (wrap.querySelector('.choice-new').hidden) openChoicePanel(wrap);
+    else closeChoicePanel(wrap);
+    return;
+  }
+  if (event.target.closest('[data-choice-commit]')) { commitChoice(wrap); return; }
+  if (event.target.closest('[data-choice-cancel]')) closeChoicePanel(wrap);
+});
+
+document.querySelector('.admin-content').addEventListener('keydown', (event) => {
+  const input = event.target.closest('[data-choice-input]');
+  if (!input) return;
+  const wrap = input.closest('.field-choice');
+  if (event.key === 'Enter') { event.preventDefault(); commitChoice(wrap); }
+  else if (event.key === 'Escape') { event.preventDefault(); closeChoicePanel(wrap); }
 });
 
 // 侧边栏切换
