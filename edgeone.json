@@ -4,6 +4,10 @@
     {
       "source": "/api/*",
       "cacheTtl": 0
+    },
+    {
+      "source": "/img",
+      "cacheTtl": 31536000
     }
   ],
   "headers": [
