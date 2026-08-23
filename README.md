@@ -38,8 +38,7 @@
 ├── admin.html                 内容后台 · 仅结构，236 行
 ├── assets/
 │   ├── admin.css              后台样式（513 行）
-│   ├── admin.js               后台逻辑（741 行）
-│   └── favicon.png            站点图标，仓库里唯一的图片（见 §3）
+│   └── admin.js               后台逻辑（741 行）
 ├── functions/
 │   └── api/
 │       └── content.js         边缘函数：GET 读内容 / POST 写内容
@@ -55,10 +54,12 @@
 外部脚本用 `<script src="assets/admin.js" defer>`，是 classic script 而**不是 `type="module"`**：
 模块脚本在 `file://` 下会被 CORS 拦掉，那样双击打开就废了。
 
-商品图已全部改用图床，所以原始素材（`素材/`，约 106 MB 含 mp4）和 `assets/gyp/` 下 4 张
-已弃用的 PNG 都已从版本控制移出并写入 `.gitignore`——文件仍在本地磁盘上，只是不再入库、
-不再部署。注意这只影响最新快照：**历史提交里的二进制还在，`.git` 仍约 105 MB**，
-要真正瘦身需要重写历史 + 强制推送。
+所有图片已改用图床，所以原始素材（`素材/`，约 106 MB 含 mp4）和 `assets/gyp/` 下已弃用的
+本地图片都已从版本控制移出并写入 `.gitignore`——文件仍在本地磁盘上，只是不再入库、不再部署。
+
+**2026-08-23 已重写全部 Git 历史**，用 `git filter-branch` 把这些二进制从每一个提交里
+彻底剔除，并强制推送。所以现在 clone 下来是个纯文本仓库。副作用：**所有提交的 SHA 都变了**，
+重写之前的克隆无法直接 `git pull`，需要重新 clone 或 `git fetch && git reset --hard origin/main`。
 
 工作区根目录下的 `gyp-merch-gallery.html`、`history-archive.html`、`admin.html`
 是**改造前的旧版**，仅作对照保留。确认新版无误后可以删除，避免两份并存产生分歧。
@@ -86,9 +87,14 @@
    用 `/open/` 前缀访问它会返回 **404**。11 个素材里只有这一个是 `item`，其余 10 个都是 `open`。
    所以「在文件名前加 `/bfs/garb/open/`」这条规则有一个例外，加图片时请先用浏览器验证链接能打开。
 
-2. **`favicon.png` 没有图床链接。** 它的源文件是 `素材/网站小图标.png`，
-   不是哈希命名的图床素材，因此没有对应的 CDN 地址。它保持本地引用
-   （只有 26 KB，站点图标本地托管其实更稳）。这是页面里唯一的本地图片引用。
+2. **站点图标在另一个域下。** 它不是 `i0.hdslb.com/bfs/garb/open/`，而是
+   `https://i2.hdslb.com/bfs/face/606736d259de6feb6a90c6205b7edc63e671302d.jpg`
+   ——`i2` 不是 `i0`，`face` 不是 `garb/open`，扩展名是 `.jpg`（所以 `type="image/jpeg"`）。
+   这张图与 `素材/网站图标.jpg` 字节完全一致（84511 字节，md5 `1c168eb2…`），已核对。
+   **必须写完整的 `https://`**：协议相对的 `//i2.hdslb.com/…` 在 `file://` 下会被解析成
+   `file://i2.hdslb.com/…`，双击打开时取不到图标。
+
+结果是**仓库里没有任何图片文件**。
 
 ### 未使用的素材
 

@@ -18,8 +18,9 @@
 | `admin.html` | 后台管理页 · **仅结构**，236 行 | 无内联样式 |
 | `assets/admin.css` | 后台样式（513 行） | 整个文件 |
 | `assets/admin.js` | 后台逻辑（741 行） | — |
-| `assets/favicon.png` | 站点图标，三个页面共用 | — |
 | `functions/api/content.js` | EdgeOne 边缘函数：读写 KV | — |
+
+仓库里**没有任何图片**，站点图标也走图床（见 §9）。
 
 技术约定，不要打破：
 
@@ -30,7 +31,7 @@
   否则 `file://` 下会因 CORS 直接不执行。同理 `assets/admin.js` 里不能出现 `import` / `export`。
 - 每个文件控制在 1000 行上下；超了就抽外部文件，不要无限膨胀。
 - **图片一律走图床直链** `https://i0.hdslb.com/bfs/garb/open/<文件名>`，不放本地副本。
-  唯一例外是 `assets/favicon.png`（无图床地址，见 §9）。
+  **没有例外**——站点图标也是图床链接，所以仓库里一张图片都没有（见 §9）。
 - 新页面从现有展示页**复制整段 `:root` + 基础重置**开始，不要重写 CSS。
 
 
@@ -330,10 +331,11 @@ if (!Object.keys(overrides).length) return; // KV 是空的 → 同上
 
 在 `collections` 里加一项，需要：`section`（`home`/`archive`）、`orderKey`、`prefix`、`defaultOrder`、`emptyText`、`confirmWord`、`fields`、`blank(n)`。增删排序逻辑（`addItem` / `removeItem` / `moveItem`）是通用的，不用重写。
 
-### 图床链接的两个坑
+### 图床链接的三个坑
 
 1. 规则是「文件名前加 `https://i0.hdslb.com/bfs/garb/open/`」，但**有例外**：星屿立牌那张的前缀是 `/bfs/garb/item/`，用 `/open/` 会 404。**加新图前先在浏览器里验一下链接能打开。**
-2. `favicon.png` 没有图床地址（它的源文件不是哈希命名的图床素材），所以站点图标是**唯一保留在仓库里的本地图片**，路径 `assets/favicon.png`。
+2. 站点图标走的是**另一个域和另一个路径**——`https://i2.hdslb.com/bfs/face/606736d259de6feb6a90c6205b7edc63e671302d.jpg`（`i2` 不是 `i0`，`face` 不是 `garb/open`，而且是 `.jpg`，所以 `type="image/jpeg"`）。别套用商品图的规则去拼它。
+3. **图床链接一律写完整的 `https://`，不要写协议相对的 `//i2.hdslb.com/…`。** 后者在 `file://` 下会被解析成 `file://i2.hdslb.com/…` 而取不到——本项目要求双击能打开，所以这条是硬性的。
 
 
 ---
@@ -341,7 +343,7 @@ if (!Object.keys(overrides).length) return; // KV 是空的 → 同上
 ## 10. 新增页面检查清单
 
 1. 复制 `history-archive.html` 的 `:root` + 基础重置 + `.site-header` / `footer`，不要从零写 CSS。
-2. `<html lang="zh-CN">`、`<meta name="viewport">`、`favicon` 指向 `assets/favicon.png`、`<meta name="description">` 写真实描述。
+2. `<html lang="zh-CN">`、`<meta name="viewport">`、`favicon` 用图床直链（见 §9 第 3 条，必须带 `https://`）、`<meta name="description">` 写真实描述。
 3. 所有可见文案用简体中文；编号、状态标签用 mono。
 4. 页面里同一动作只有一个实心主按钮，其余用 ghost / 文字链接。
 5. 补齐 `data-od-id`；需要后台可编辑就同时接 `applySiteContent()`，并保留「取不到就 return」的静态兜底。
@@ -381,9 +383,12 @@ Linked code folder：`C:\Users\17855\Desktop\Code\GYP\GYP-Showcase`（只读参�
 
 ### 不入库的东西
 
-`.gitignore` 挡掉了 `素材/`（约 106 MB 原始素材，含 mp4）和 `assets/gyp/`（已弃用的本地商品图）。
-仓库只装 8 个文件。注意：**这两处只是不再入库，历史提交里的二进制还在**，`.git` 仍约 105 MB；
-要真正瘦身得重写历史 + 强推，属于不可逆操作，需单独确认。
+`.gitignore` 挡掉了 `素材/`（约 106 MB 原始素材，含 mp4）和 `assets/gyp/`（已弃用的本地图片）。
+仓库只装文本文件，**一张图片都没有**。
+
+**2026-08-23 已用 `git filter-branch` 重写全部历史**，把这些二进制从每个提交里剔除后强推。
+所以「历史里还留着大文件」这个问题已经解决，不要再按旧说法处理。代价是所有提交 SHA 都变了——
+如果你在别处有旧克隆，重新 clone，别硬 merge。
 
 新增静态资源时留意 `.gitignore` 的 `assets/` 规则，别让新文件被误挡——加完跑一次
 `git check-ignore -v <新文件>` 确认。
