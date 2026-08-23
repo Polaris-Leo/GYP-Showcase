@@ -69,8 +69,14 @@ async function handle(request) {
   // 内容变了键名必然变，不需要再去 getMetadata 多问一次。
   const etag = '"' + key.slice(4, 36) + '"';
 
-  const inm = request.headers.get('If-None-Match');
-  if (inm && inm.includes(etag.slice(1, -1))) {
+  const inm = (request.headers.get('If-None-Match') || '').trim();
+  const inmMatch =
+    inm === '*' ||
+    inm.split(',').some((t) => {
+      const s = t.trim();
+      return s === etag || s === `W/${etag}`;
+    });
+  if (inmMatch) {
     return new Response(null, { status: 304, headers: { ETag: etag, 'Cache-Control': HIT_CACHE } });
   }
 
