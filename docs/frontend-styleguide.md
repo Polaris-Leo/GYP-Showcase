@@ -19,6 +19,7 @@
 | `assets/admin.css` | 后台样式（513 行） | 整个文件 |
 | `assets/admin.js` | 后台逻辑（741 行） | — |
 | `functions/api/content.js` | EdgeOne 边缘函数：读写 KV | — |
+| `edgeone.json` | EdgeOne 项目配置：`/api/*` 不缓存、后台页禁止索引 | — |
 
 仓库里**没有任何图片**，站点图标也走图床（见 §9）。
 
@@ -279,6 +280,25 @@ admin.html ──POST /api/content──┐
 展示页 ─────GET /api/content────┘
                                     值形状：{ home: {...}, archive: {...} }
 ```
+
+### EdgeOne 的四个约定（已核实，不要按 Cloudflare 的习惯改）
+
+都对照过官方文档、官方模板库 `TencentEdgeOne/pages-templates` 和一个线上真实项目。
+两家平台很像，但**恰好在最关键的 KV 上不一样**，凭习惯改必然踩坑：
+
+| 约定 | 正确写法 | 容易写错成 |
+|---|---|---|
+| 函数源码目录 | `functions/` | `edge-functions/`——那是**构建产物**目录（`.edgeone/edge-functions/`） |
+| KV 句柄 | **裸全局变量** `GYP_CONTENT.get(...)` | `env.GYP_CONTENT.get(...)`——取不到，会返回 503 |
+| 环境变量 | `context.env.ADMIN_TOKEN` | （这条一样，确实走 `env`） |
+| 处理函数导出 | 具名 `export async function onRequest(context)` | `export default {...}`——官方零个示例这么写 |
+
+因为 KV 是裸全局变量，`resolveKV()` 里第一顺位必须是**直接引用标识符** `GYP_CONTENT`
+（用 `typeof` 守卫避免未绑定时抛 `ReferenceError`）。`globalThis['GYP_CONTENT']` 不可靠：
+若运行时是用模块作用域注入的，从 `globalThis` 上取不到。改绑定名时这两处都要同步改。
+
+**排查口诀：404 是路由问题，503 是绑定问题。** 又因为下面「静态优先」的设计，
+接口坏了首页照样正常显示，**光看首页发现不了**，必须直接访问 `/api/content`。
 
 ### 静态优先——这条是地基，任何改动都不能破坏
 

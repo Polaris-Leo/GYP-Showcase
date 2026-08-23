@@ -44,10 +44,22 @@
 │       └── content.js         边缘函数：GET 读内容 / POST 写内容
 ├── docs/
 │   └── frontend-styleguide.md 前端样式契约：设计令牌、组件规范、数据契约
+├── edgeone.json               EdgeOne 项目配置：/api/* 不缓存、后台页禁止索引
 ├── .gitattributes             行尾统一 LF
 ├── .gitignore
 └── README.md                  本文件
 ```
+
+### 为什么函数目录叫 `functions/` 而不是 `edge-functions/`
+
+官方文档《Edge Functions》里写的是 `/edge-functions` 目录，但那指的是**构建产物**位置。
+实际源码目录是 `functions/`，构建后才被打包进 `.edgeone/edge-functions/`（已 gitignore）。
+两个独立来源可以互相印证：
+
+- 官方模板库 `TencentEdgeOne/pages-templates`：17 个示例用 `functions/`，其中包括 KV 示例 `functions-kv`。
+- 线上真实项目 `Yukari-Song-List-EdgeOne`：源码 `functions/`，产物 `.edgeone/edge-functions/`。
+
+所以 `functions/api/content.js` 对应的路由就是 `/api/content`，位置无需改动。
 
 **两个展示页刻意保持单文件内联样式**——它们要能被单独丢到任何地方打开，少一个请求就少一个出错点。
 **后台页则拆成 HTML + 外部 CSS/JS**，因为它原本 1489 行，早已超出单文件的可维护上限。
@@ -154,17 +166,32 @@ admin.html  ──POST /api/content──▶  边缘函数  ──put──▶  
 
 ## 5. 部署步骤
 
-> 本节的具体 API 形态以官方文档为准，见 `functions/api/content.js` 顶部注释。
+> 本节的每一条都已对照官方文档 + 官方模板库 + 一个线上真实 EdgeOne 项目核实过，
+> 不是按 Cloudflare 的习惯推测的（这两家很像但不一样，KV 取法就正好不同）。
 
-1. **创建 Pages 项目**：EdgeOne 控制台 → Pages → 新建项目，导入本仓库。
-   构建命令留空，输出目录填仓库根目录（`.`）。
+1. **导入仓库开启自动部署**：EdgeOne 控制台 → Pages → 新建项目 → 导入 Git 仓库，
+   选择本仓库。构建设置里**构建命令留空**（本项目无构建步骤），
+   输出目录也**不用填**——根目录静态站保持默认即可。
+   > 官方纯静态模板 `html5up-massively` / `html5up-paradigm-shift` 同样是根目录多页 HTML，
+   > 既没有 `package.json` 也没有配置输出目录，可以照此参照。本仓库的 `edgeone.json`
+   > 也**故意不写 `outputDirectory`**：没有任何官方示例把它设成 `"."`，与其赌一个没人验证过的
+   > 写法，不如用已被证明可行的默认值。
+
+   导入后 EdgeOne 会把项目绑定到一个**部署分支**（本仓库为 `main`）。
+   之后每次 `git push` 到该分支都会自动触发构建与发布，这就是你要的代码仓自动部署。
 
 2. **创建并绑定 KV 命名空间**：控制台创建一个 KV 命名空间，
-   在 Pages 项目的「KV 绑定」里把它绑到变量名 **`GYP_CONTENT`**。
-   > 函数里读的就是这个名字。改名的话 `functions/api/content.js` 顶部的 `KV_BINDING` 要同步改。
+   绑定名填 **`GYP_CONTENT`**。
+
+   > ⚠️ **EdgeOne 的 KV 绑定是一个「裸全局变量」，不是 `env.XXX`。**
+   > 绑定名必须和代码里的全局变量名**逐字一致**，否则函数取不到句柄。
+   > 官方 KV 示例写的是 `my_kv.get(...)`，线上项目 Yukari 写的是 `Yukari_Songs.get(...)`，
+   > 都不经过 `env`。本项目对应 `functions/api/content.js` 里的 `GYP_CONTENT`。
+   > 改名的话，该文件顶部的 `KV_BINDING` 常量**和 `resolveKV()` 里的标识符都要同步改**。
 
 3. **设置管理口令**：在 Pages 项目的环境变量里加
    **`ADMIN_TOKEN`** = 你自己定的一串口令。
+   > 环境变量走的是 `context.env.ADMIN_TOKEN`——这条和 KV 不同，确实通过 `env` 读取。
    > 没设这个变量时，函数会**拒绝所有写入**（而不是放行），避免后台裸奔。
 
 4. **部署**，然后打开 `https://<你的域名>/admin.html`，
@@ -173,9 +200,15 @@ admin.html  ──POST /api/content──▶  边缘函数  ──put──▶  
 ### 自查清单
 
 - [ ] `/api/content` 直接用浏览器打开，返回 JSON（首次是 `{}`）而不是 404 → 函数生效了
+- [ ] 若返回 **503 且提示「KV 未绑定」** → 函数跑起来了但 KV 绑定名不对，回到第 2 步逐字核对
 - [ ] 后台徽标显示「● 已连接线上」→ KV 绑定成功
 - [ ] 改一个标题保存，无痕窗口打开首页能看到 → 全站生效
 - [ ] 不填口令时保存报「口令不正确或已失效」→ 鉴权生效
+
+> 排查顺序很重要：**404 是路由/目录问题，503 是绑定问题**，两者原因完全不同。
+> 因为展示页是「静态优先」的（`if (!res.ok) return;`），接口坏掉时首页依然正常显示内置默认值，
+> **光看首页永远发现不了问题**，必须直接访问 `/api/content` 才能确认。
+
 
 ---
 

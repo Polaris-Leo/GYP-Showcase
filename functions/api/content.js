@@ -23,11 +23,18 @@ const json = (body, status = 200, extra) =>
   new Response(JSON.stringify(body), { status, headers: { ...JSON_HEADERS, ...extra } });
 
 /**
- * 取 KV 句柄。不同运行时把绑定挂在不同位置（context.env / 全局变量），
- * 这里按优先级依次尝试，全部落空才报错，并在错误信息里说明原因。
+ * 取 KV 句柄。
+ *
+ * EdgeOne 的 KV 绑定是一个**裸全局变量**，变量名就是控制台里填的绑定名——
+ * 官方示例写 `my_kv.get(...)`，而不是 `env.my_kv.get(...)`。所以第一顺位必须是
+ * 直接引用标识符 GYP_CONTENT：如果运行时是用模块作用域注入的，`globalThis[...]`
+ * 取不到它。用 typeof 兜住未绑定时的 ReferenceError（对未声明标识符做 typeof 是安全的）。
+ *
+ * 后面几个 env 分支是保险，留给本地调试工具或将来 EdgeOne 改成 env 注入的情况。
  */
 function resolveKV(env) {
   const candidates = [
+    typeof GYP_CONTENT !== 'undefined' ? GYP_CONTENT : undefined,
     env && env[KV_BINDING],
     typeof globalThis !== 'undefined' ? globalThis[KV_BINDING] : undefined,
     env && env[KV_BINDING.toLowerCase()],
@@ -122,12 +129,9 @@ async function handle(request, env) {
   return json({ error: '不支持的方法：' + method }, 405, { Allow: 'GET, POST, OPTIONS' });
 }
 
-// Pages Functions 约定：导出 onRequest，参数为 context
-export function onRequest(context) {
+// EdgeOne Pages Functions 约定：具名导出 onRequest，参数为 context。
+// 官方示例与线上项目一律用具名导出，没有一个用 export default——
+// 这里也不要加 default 导出，避免打包时被当成另一种入口形态。
+export async function onRequest(context) {
   return handle(context.request, context.env || {});
 }
-
-// Workers 风格入口，便于在兼容该形态的运行时/本地调试工具中复用同一份逻辑
-export default {
-  fetch: (request, env) => handle(request, env || {}),
-};

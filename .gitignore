@@ -6,3 +6,8 @@
 # 已弃用的本地图片：站点图片全部改用图床，仓库里不再有任何图片文件
 # 站点图标也走图床（i2.hdslb.com/bfs/face/...），见 README §3
 assets/gyp/
+
+# EdgeOne 本地构建产物。functions/ 是源码目录，构建后会被打包到 .edgeone/edge-functions/，
+# 那份产物不能入库（否则和源码打架）。用 edgeone CLI 本地跑过就会生成这两个目录。
+.edgeone/
+.tef_dist/
