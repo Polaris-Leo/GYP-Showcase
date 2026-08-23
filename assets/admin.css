@@ -239,11 +239,12 @@ a { color: inherit; text-decoration: none; }
 .field-inline { display: flex; gap: 8px; }
 .field-inline select { flex: 1 1 0; min-width: 0; }
 
-/* 可增选项的下拉：一行「下拉 + ＋新增」，展开后在下方多出一行输入框。
+/* 可增选项的下拉：「＋ 新增…」是下拉列表里的最后一项，旁边没有按钮，
+   所以这里只有一个占满整行的 select；选中那一项之后才在下方展开一行输入框。
    .choice-new 用 class 设了 display:flex，会盖掉 [hidden] 的 UA display:none，
    所以必须显式补回 [hidden] 那条，否则新增行一直是展开的。 */
 .field-choice { display: flex; flex-direction: column; gap: 8px; }
-.field-choice > .field-inline > .btn { flex: 0 0 auto; white-space: nowrap; }
+.field-choice > select { width: 100%; }
 .choice-new { display: flex; gap: 8px; }
 .choice-new[hidden] { display: none; }
 .choice-new input[type="text"] { flex: 1 1 0; min-width: 0; }

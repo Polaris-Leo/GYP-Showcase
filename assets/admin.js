@@ -276,6 +276,14 @@ function bindFields(scope) {
     if (input.dataset.bound === '1') return;
     input.dataset.bound = '1';
     input.addEventListener('input', () => {
+      // 下拉里的「＋ 新增…」只是个入口，不是一个值：展开输入行并把下拉退回原值，
+      // 这一次改动不写进数据。必须排在所有 updateValue 之前。
+      if (input.dataset.choice && isChoiceAdd(input)) {
+        openChoicePanel(input.closest('.field-choice'));
+        return;
+      }
+      // 记住这次选的真实值，下次点「＋ 新增…」时要退回到它
+      if (input.dataset.choice) input.dataset.prev = input.value;
       if (input.dataset.ym) {
         updateValue(input.dataset.field, readYm(input));
         const wrap = input.closest('.field-inline');
@@ -317,7 +325,7 @@ const collections = {
           { label: '售价', choice: 'merch-meta-price' },
           { label: '获得方式', choice: 'merch-meta-how' }
         ],
-        hint: '首页卡片上那行小字，按「<code>状态：品类／售价／获得方式</code>」拼出来。四段都能直接选，选项来自其它物品正在用的值；没有合适的就点「＋ 新增…」现场加一个。<strong>留空的尾段会被省略</strong>，所以只填前两段也不会拼出多余的斜杠。' },
+        hint: '首页卡片上那行小字，按「<code>状态：品类／售价／获得方式</code>」拼出来。四段都能直接选，选项就是其它物品正在用的值；下拉的最后一项「＋ 新增…」可以现场加一个。<strong>留空的尾段会被省略</strong>，所以只填前两段也不会拼出多余的斜杠。' },
       { key: 'type', label: '展厅分类', kind: 'select',
         hint: '决定首页筛选归类，以及卡片序号后缀（GIFT / PLAN）。<strong>这一项只有这两个值，不能自行新增</strong>：首页的筛选按钮和后缀映射是写死在展示页里的，第三个分类首页认不出来，会被当成「舰长礼物」处理。要加分类得连首页一起改。',
         options: [['gift', '舰长礼物'], ['sale', '收藏企划']] },
@@ -345,7 +353,7 @@ const collections = {
       { key: 'date', label: '日期', kind: 'year-month', half: true,
         hint: '直接选择年月；展示页仍会分两行显示年份与月份。' },
       { key: 'category', label: '类别', kind: 'choice', choice: 'archive-category',
-        hint: '从已有类别里直接选；没有合适的就点「＋ 新增类别」现场加一个，加完会立刻用在本条目上，并出现在其它条目的下拉里。同时用于列表的「类别：…」与表格视图的标签。' },
+        hint: '选项就是其它条目正在用的类别；下拉的最后一项「＋ 新增类别」可以现场加一个，加完会立刻用在本条目上，并出现在其它条目的下拉里。<strong>没有任何条目在用的类别会自动从下拉里消失。</strong>同时用于列表的「类别：…」与表格视图的标签。' },
       { key: 'desc', label: '简介', kind: 'textarea', grow: true },
       { key: 'image', label: '图片链接', kind: 'text', preview: true,
         hint: '填图床完整链接。B 站装扮素材的链接＝<code>https://i0.hdslb.com/bfs/garb/open/</code> ＋ 图片文件名。' }
@@ -447,10 +455,11 @@ function joinMeta(parts) {
   return parts[0] ? parts[0] + META_COLON + body : body;
 }
 
-// ── 可增选项的下拉：选项表不单独存，直接从「有哪些条目正在用这个值」推导 ──
-// 这样「新增选项」就是「把新值写进当前条目」的副产物：它立刻出现在同组其它条目的
-// 下拉里；而如果输错了、没有任何条目在用它，下次渲染时它自己就消失了，
-// 不会在数据里攒下一堆删不掉的脏选项。种子只取默认内容里真实出现过的值。
+// ── 可增选项的下拉：选项表不单独存，完全从「有哪些条目正在用这个值」推导 ──
+// 所以「新增选项」就是「把新值写进当前条目」的副产物：它立刻出现在同组其它条目的
+// 下拉里；而一旦没有任何条目在用它（输错了、或用它的条目都被改/删了），
+// 下次渲染时它自己就消失，不会在数据里攒下一堆删不掉的脏选项。
+// 刻意不保留任何常驻种子：选项表 = 当前实际配置的内容，别的都不该出现。
 const dedupeList = (list) => list.filter((v, i) => v && list.indexOf(v) === i);
 
 // derive 可选：字段值本身不是选项时（例如 meta 要取其中一段），用它抽出选项文本
@@ -466,50 +475,36 @@ function collectChoiceValues(source, section, orderKey, key, derive) {
   }));
 }
 
-// meta 四段各自一个选项组：种子从默认内容里真实出现过的段值推导，
-// 再补上本项目既有的占位约定，保证空物品也能选到东西。
-function metaSeed(index, extra) {
-  return dedupeList(
-    collectChoiceValues(nestedDefaults, 'home', 'merchOrder', 'meta', (v) => metaParts(v)[index])
-      .concat(extra || [])
-  );
-}
-
+// meta 四段各自一个选项组，段值靠 derive 从整串里抽出来
 const choiceGroups = {
   'archive-category': {
     section: 'archive',
     orderKey: 'itemOrder',
     key: 'category',
-    // '待补充' 是本项目既有的占位约定（展示页写作「待补资料」），保留成常驻选项
-    seed: dedupeList(collectChoiceValues(nestedDefaults, 'archive', 'itemOrder', 'category').concat('待补充')),
     addLabel: '新增类别',
     placeholder: '输入新的类别，例如「亚克力挂件」'
   },
   'merch-meta-state': {
     section: 'home', orderKey: 'merchOrder', key: 'meta',
     derive: (v) => metaParts(v)[0],
-    seed: metaSeed(0, ['设想']),
     addLabel: '新增状态',
     placeholder: '输入新的状态，例如「已开售」'
   },
   'merch-meta-kind': {
     section: 'home', orderKey: 'merchOrder', key: 'meta',
     derive: (v) => metaParts(v)[1],
-    seed: metaSeed(1, ['待补充']),
     addLabel: '新增品类',
     placeholder: '输入新的品类，例如「金属徽章」'
   },
   'merch-meta-price': {
     section: 'home', orderKey: 'merchOrder', key: 'meta',
     derive: (v) => metaParts(v)[2],
-    seed: metaSeed(2, ['待定']),
     addLabel: '新增售价',
     placeholder: '输入新的售价说明，例如「¥68」'
   },
   'merch-meta-how': {
     section: 'home', orderKey: 'merchOrder', key: 'meta',
     derive: (v) => metaParts(v)[3],
-    seed: metaSeed(3, ['待定']),
     addLabel: '新增方式',
     placeholder: '输入新的获得方式，例如「线下会场限定」'
   }
@@ -518,7 +513,18 @@ const choiceGroups = {
 function choiceOptions(groupName) {
   const g = choiceGroups[groupName];
   if (!g) return [];
-  return dedupeList(g.seed.concat(collectChoiceValues(data, g.section, g.orderKey, g.key, g.derive)));
+  return collectChoiceValues(data, g.section, g.orderKey, g.key, g.derive);
+}
+
+// 「＋ 新增…」是下拉列表里的最后一项，不是下拉外面的按钮。
+// 它的值只在页面内部用来识别「用户点了新增」，绝不会被写进数据。
+const CHOICE_ADD = '__ADD_NEW__';
+
+// 认 data-choice-add 而不是只比字符串：万一哪天用户真把某个选项取名成
+// 「__ADD_NEW__」，真实选项排在哨兵前面，也不会被误判成新增。
+function isChoiceAdd(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  return !!(opt && opt.dataset.choiceAdd);
 }
 
 function paintChoiceOptions(sel) {
@@ -529,10 +535,17 @@ function paintChoiceOptions(sel) {
     opt.textContent = v;
     sel.appendChild(opt);
   });
+  const g = choiceGroups[sel.dataset.choice];
+  const add = document.createElement('option');
+  add.value = CHOICE_ADD;
+  add.dataset.choiceAdd = '1';
+  add.textContent = '＋ ' + ((g && g.addLabel) || '新增选项') + '…';
+  sel.appendChild(add);
 }
 
 // 数据里的值不在选项表里（导入的 JSON、或值为空）时就地补一个并选中，
-// 绝不静默把用户已有的值改写成第一个选项
+// 绝不静默把用户已有的值改写成第一个选项。
+// 同时记下当前值：用户点了下拉里的「＋ 新增…」之后要靠它退回原来的选择。
 function setChoiceSelect(sel, raw) {
   const want = String(raw == null ? '' : raw);
   if (![...sel.options].some((o) => o.value === want)) {
@@ -542,6 +555,7 @@ function setChoiceSelect(sel, raw) {
     sel.insertBefore(opt, sel.firstChild);
   }
   sel.value = want;
+  sel.dataset.prev = want;
 }
 
 function buildChoiceControl(field, path) {
@@ -549,22 +563,14 @@ function buildChoiceControl(field, path) {
   const wrap = document.createElement('div');
   wrap.className = 'field-choice';
 
-  const row = document.createElement('div');
-  row.className = 'field-inline';
   const sel = document.createElement('select');
   sel.dataset.field = path;
   sel.dataset.type = 'text';
   sel.dataset.choice = field.choice;
   sel.setAttribute('aria-label', field.label);
   paintChoiceOptions(sel);
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'btn btn-sm';
-  toggle.dataset.choiceToggle = '1';
-  toggle.textContent = '＋ ' + g.addLabel;
-  toggle.setAttribute('aria-expanded', 'false');
-  row.append(sel, toggle);
 
+  // 输入行平时是收起的，只有在下拉里选了「＋ 新增…」之后才出现
   const panel = document.createElement('div');
   panel.className = 'choice-new';
   panel.hidden = true;
@@ -585,7 +591,7 @@ function buildChoiceControl(field, path) {
   cancel.textContent = '取消';
   panel.append(input, commit, cancel);
 
-  wrap.append(row, panel);
+  wrap.append(sel, panel);
   return wrap;
 }
 
@@ -626,18 +632,23 @@ function partInputError(sel, value) {
   return '';
 }
 
+// 打开输入行的同时必须把下拉退回原来的值：哨兵项只是个入口，
+// 绝不能让 '__ADD_NEW__' 停在下拉上——那样一存就把它当成真值写进数据了。
 function openChoicePanel(wrap) {
+  const sel = wrap.querySelector('select');
   const input = wrap.querySelector('[data-choice-input]');
+  sel.value = sel.dataset.prev == null ? '' : sel.dataset.prev;
+  sel.setAttribute('aria-expanded', 'true');
   wrap.querySelector('.choice-new').hidden = false;
-  wrap.querySelector('[data-choice-toggle]').setAttribute('aria-expanded', 'true');
   input.value = '';
   input.focus();
 }
 
 function closeChoicePanel(wrap) {
+  const sel = wrap.querySelector('select');
   wrap.querySelector('.choice-new').hidden = true;
-  wrap.querySelector('[data-choice-toggle]').setAttribute('aria-expanded', 'false');
-  wrap.querySelector('select').focus();
+  sel.setAttribute('aria-expanded', 'false');
+  sel.focus();
 }
 
 function commitChoice(wrap) {
@@ -673,7 +684,7 @@ function buildControl(field, path) {
     return el;
   }
   if (field.kind === 'choice') {
-    // 复合控件：下拉 + 折叠的「新增选项」输入行
+    // 复合控件：下拉（含「＋ 新增…」那一项）+ 折叠的新增输入行
     return buildChoiceControl(field, path);
   }
   if (field.kind === 'parts') {
@@ -883,16 +894,12 @@ document.querySelector('.admin-content').addEventListener('click', (event) => {
   if (move) moveItem(name, id, move.dataset.itemMove === 'up' ? -1 : 1);
 });
 
-// 「＋ 新增选项」的展开／提交／取消。单独挂一个监听：它和上面的增删排序互不相干，
-// 且新增行里的输入框故意不带 data-field，不会被 bindFields 绑上、也不会写进数据。
+// 新增选项行的提交／取消。展开由下拉里的「＋ 新增…」触发（见 bindFields），
+// 这里只管两个按钮。新增行里的输入框故意不带 data-field，
+// 不会被 bindFields 绑上、也不会写进数据。
 document.querySelector('.admin-content').addEventListener('click', (event) => {
   const wrap = event.target.closest('.field-choice');
   if (!wrap) return;
-  if (event.target.closest('[data-choice-toggle]')) {
-    if (wrap.querySelector('.choice-new').hidden) openChoicePanel(wrap);
-    else closeChoicePanel(wrap);
-    return;
-  }
   if (event.target.closest('[data-choice-commit]')) { commitChoice(wrap); return; }
   if (event.target.closest('[data-choice-cancel]')) closeChoicePanel(wrap);
 });
