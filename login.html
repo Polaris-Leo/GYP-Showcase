@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>登录 · 鸽一品周边展厅后台</title>
+  <link rel="icon" href="https://i2.hdslb.com/bfs/face/606736d259de6feb6a90c6205b7edc63e671302d.jpg" type="image/jpeg">
+  <meta name="robots" content="noindex, nofollow">
+  <style>
+    /* 令牌与站点保持同一套（见 docs/frontend-styleguide.md §1）：
+       只用 oklch()，不用圆角、不用阴影 */
+    :root {
+      --bg: oklch(1 0 0);
+      --surface: oklch(0.97 0 0);
+      --fg: oklch(0.28 0 0);
+      --muted: oklch(0.56 0 0);
+      --border: oklch(0.9 0 0);
+      --accent: oklch(0.53 0.12 257);
+      --danger: oklch(0.55 0.2 27);
+      --display: "Noto Serif SC", "Songti SC", STSong, serif;
+      --body: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+      --mono: ui-monospace, "Cascadia Mono", monospace;
+      --ease: cubic-bezier(.22, .61, .36, 1);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--body);
+      display: grid;
+      grid-template-rows: 1fr auto;
+    }
+
+    .login-wrap {
+      display: grid;
+      place-items: center;
+      padding: clamp(28px, 6vw, 72px) clamp(20px, 5vw, 48px);
+    }
+
+    .login-card {
+      width: min(100%, 420px);
+      border: 1px solid var(--border);
+      background: var(--bg);
+      padding: clamp(30px, 5vw, 46px);
+    }
+
+    .login-brand {
+      font-family: var(--display);
+      font-size: 13px;
+      letter-spacing: .28em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 26px;
+    }
+
+    h1 {
+      font-family: var(--display);
+      font-weight: 500;
+      font-size: clamp(30px, 5vw, 40px);
+      line-height: 1.16;
+      margin: 0 0 12px;
+    }
+
+    .login-intro {
+      margin: 0 0 30px;
+      font-size: 14px;
+      line-height: 1.75;
+      color: var(--muted);
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 9px;
+    }
+
+    input[type="password"] {
+      width: 100%;
+      padding: 13px 14px;
+      border: 1px solid var(--border);
+      border-radius: 0;
+      background: var(--surface);
+      color: var(--fg);
+      font-family: var(--mono);
+      font-size: 15px;
+      transition: border-color .2s var(--ease);
+    }
+
+    input[type="password"]:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    button {
+      width: 100%;
+      margin-top: 22px;
+      padding: 14px 18px;
+      border: 1px solid var(--fg);
+      border-radius: 0;
+      background: var(--fg);
+      color: var(--bg);
+      font-family: var(--body);
+      font-size: 14px;
+      letter-spacing: .14em;
+      cursor: pointer;
+      transition: background .2s var(--ease), border-color .2s var(--ease);
+    }
+
+    button:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); }
+    button:disabled { opacity: .5; cursor: default; }
+
+    /* 提示区常驻占位，避免出现错误时整张卡片跳动 */
+    .login-msg {
+      min-height: 20px;
+      margin: 16px 0 0;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .login-msg.is-error { color: var(--danger); }
+    .login-msg.is-info  { color: var(--muted); }
+
+    .login-foot {
+      border-top: 1px solid var(--border);
+      padding: 18px clamp(20px, 5vw, 48px);
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 18px;
+    }
+    .login-foot a { color: var(--muted); }
+    .login-foot a:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <form class="login-card" id="login-form" autocomplete="off">
+      <p class="login-brand">鸽一品 / GEYIPIN</p>
+      <h1>内容后台</h1>
+      <p class="login-intro">需要管理口令才能修改展厅内容。展示页面对所有访客公开，不受此处影响。</p>
+
+      <label for="password">管理口令</label>
+      <input type="password" id="password" name="password" autocomplete="current-password"
+             required autofocus spellcheck="false">
+
+      <button type="submit" id="submit">登 录</button>
+
+      <!-- role=status：读屏器能播报登录结果，不只是视觉提示 -->
+      <p class="login-msg" id="msg" role="status" aria-live="polite"></p>
+    </form>
+  </div>
+
+  <footer class="login-foot">
+    <span>鸽一品周边展厅</span>
+    <a href="index.html">返回展厅</a>
+    <a href="history-archive.html">历史展厅</a>
+  </footer>
+
+  <!-- classic script，不用 type=module：模块脚本在 file:// 下会被 CORS 拦掉 -->
+  <script src="assets/login.js" defer></script>
+</body>
+</html>

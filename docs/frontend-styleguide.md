@@ -16,9 +16,13 @@
 | `index.html` | 首页 · 当前展厅 | 内联 `<style>` 第 9–249 行 |
 | `history-archive.html` | 历史档案展厅（列表／表格双视图 + 分页） | 内联 `<style>` 第 9–152 行 |
 | `admin.html` | 后台管理页 · **仅结构**，236 行 | 无内联样式 |
+| `login.html` | 后台登录页 · 自包含单文件 | 内联 `<style>`（令牌与站点一致） |
 | `assets/admin.css` | 后台样式（513 行） | 整个文件 |
 | `assets/admin.js` | 后台逻辑（741 行） | — |
-| `functions/api/content.js` | EdgeOne 边缘函数：读写 KV | — |
+| `assets/login.js` | 登录页逻辑（普通脚本，非 module） | — |
+| `functions/api/content.js` | EdgeOne 边缘函数：读写 KV，写入前验签 | — |
+| `functions/api/auth.js` | EdgeOne 边缘函数：登录 / 登出 / 查询会话 | — |
+| `middleware.js` | 边缘中间件：未登录跳登录页（**仅体验，非安全边界**） | — |
 | `edgeone.json` | EdgeOne 项目配置：`/api/*` 不缓存、后台页禁止索引 | — |
 
 仓库里**没有任何图片**，站点图标也走图床（见 §9）。
@@ -299,6 +303,23 @@ admin.html ──POST /api/content──┐
 
 **排查口诀：404 是路由问题，503 是绑定问题。** 又因为下面「静态优先」的设计，
 接口坏了首页照样正常显示，**光看首页发现不了**，必须直接访问 `/api/content`。
+
+### 鉴权：两条规矩
+
+**1. 验签的密码学函数在 `auth.js` 和 `content.js` 里各有一份，改一处必须改两处。**
+
+这是有意重复，不是漏了重构。EdgeOne 的 `functions/` 是**按文件路径路由**的目录：
+往里放一个非路由的共享模块，会不会被当成路由、跨目录 `import` 能不能被正确打包，
+官方示例里找不到印证。宁可复制这 30 行，也不赌一个没验证过的模块解析行为。
+两份代码的头部都写了这条警告，动之前先看一眼。
+
+**2. `middleware.js` 不是安全边界，安全边界在 `POST /api/content` 的验签。**
+
+中间件的 context 里**没有 `env`**（只有 `request / next / redirect / rewrite / geo / clientIp`），
+拿不到 `ADMIN_TOKEN`，签名无法校验，所以它只能判断 Cookie 在不在。
+它跳转是**单向的**（未登录 → 登录页），不做反向跳转：否则拿着一张过期但存在的 Cookie 的人，
+会在「中间件 → 后台 → admin.js 发现过期 → 登录页 → 中间件」之间无限弹跳。
+增删鉴权逻辑时，永远假设中间件可能完全不生效。
 
 ### 静态优先——这条是地基，任何改动都不能破坏
 

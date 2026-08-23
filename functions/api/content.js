@@ -22,6 +22,57 @@ const JSON_HEADERS = {
 const json = (body, status = 200, extra) =>
   new Response(JSON.stringify(body), { status, headers: { ...JSON_HEADERS, ...extra } });
 
+/* ── 会话校验 ──────────────────────────────────────────────────────────
+ * ⚠️ 下面这几个函数是 functions/api/auth.js 的副本，**改一处必须改两处**。
+ * 之所以不抽成共享模块：EdgeOne 的函数目录是按文件路由的，放进 functions/ 的
+ * 非路由文件会不会被当成路由、以及跨目录 import 能否被正确打包，都没有官方示例
+ * 可以印证。宁可复制这 30 行，也不赌一个未经验证的模块解析行为。
+ * 令牌形状与签名口径见 auth.js 顶部注释。
+ */
+const COOKIE_NAME = 'gyp_admin';
+const enc = new TextEncoder();
+
+const b64url = (buf) =>
+  btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+
+async function hmac(secret, message) {
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  return b64url(await crypto.subtle.sign('HMAC', key, enc.encode(message)));
+}
+
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+async function verifySession(secret, token) {
+  if (!secret || !token) return false;
+  const dot = token.indexOf('.');
+  if (dot <= 0) return false;
+  const exp = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  if (!/^\d+$/.test(exp)) return false;
+  if (!safeEqual(sig, await hmac(secret, exp))) return false;
+  return Number(exp) > Date.now();
+}
+
+function readCookie(request, name) {
+  const raw = request.headers.get('Cookie');
+  if (!raw) return '';
+  for (const part of raw.split(';')) {
+    const s = part.trim();
+    if (s.startsWith(name + '=')) return s.slice(name.length + 1);
+  }
+  return '';
+}
+
 /**
  * 取 KV 句柄。
  *
@@ -94,9 +145,14 @@ async function handle(request, env) {
     if (!expected) {
       return json({ error: '服务端未设置 ADMIN_TOKEN，已拒绝写入。请在 Pages 环境变量中配置。' }, 503);
     }
-    const supplied = request.headers.get('X-Admin-Token') || '';
-    if (supplied !== expected) {
-      return json({ error: '口令不正确或已失效' }, 401);
+    // 两条凭据都要求知道 ADMIN_TOKEN，任一成立即可：
+    //   1) 会话 Cookie —— 后台页面登录后走这条；
+    //   2) X-Admin-Token 头 —— 留给 curl / 脚本，不必先走登录流程。
+    const authed =
+      (await verifySession(expected, readCookie(request, COOKIE_NAME))) ||
+      safeEqual(request.headers.get('X-Admin-Token') || '', expected);
+    if (!authed) {
+      return json({ error: '未登录或会话已失效' }, 401);
     }
 
     let text;

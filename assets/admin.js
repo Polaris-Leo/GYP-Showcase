@@ -1,10 +1,20 @@
 /* 鸽一品内容后台 · 逻辑。数据存 EdgeOne KV，经 /api/content 读写 */
 // 内容接口：EdgeOne Pages Function，读写绑定的 KV
 const CONTENT_API = '/api/content';
-// 管理口令只存在当前标签页（sessionStorage），关闭即失效；内容本身一律存线上 KV
-const TOKEN_KEY = 'gyp-admin-token';
-const getToken = () => sessionStorage.getItem(TOKEN_KEY) || '';
-const setToken = (v) => { if (v) sessionStorage.setItem(TOKEN_KEY, v); else sessionStorage.removeItem(TOKEN_KEY); };
+// 身份接口：登录 / 登出 / 查询会话
+const AUTH_API = '/api/auth';
+// 会话由服务端下发的 HttpOnly Cookie 承载，**前端不保存任何口令**：
+// 既不进 sessionStorage 也不进 localStorage，JS 连会话值都读不到（HttpOnly）。
+// 因此这里没有 token 变量——凭据全靠浏览器自动带上的 Cookie。
+let authState = { authenticated: false, configured: false };
+
+// 本地 file:// 打开时没有任何接口，此时不许跳转登录页，否则本地预览直接废掉
+const hasBackend = location.protocol === 'http:' || location.protocol === 'https:';
+
+function goLogin(expired) {
+  if (!hasBackend) return;
+  location.replace('login.html' + (expired ? '?expired=1' : ''));
+}
 
 // 默认值模板（用于初次填充和重置）
 const defaults = {
@@ -140,10 +150,18 @@ async function loadData() {
 async function pushData() {
   const res = await fetch(CONTENT_API, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': getToken() },
+    headers: { 'Content-Type': 'application/json' },
+    // 让浏览器带上会话 Cookie；不再手工传口令
+    credentials: 'same-origin',
     body: JSON.stringify(data)
   });
-  if (res.status === 401) { apiState = 'locked'; throw new Error('口令不正确或已失效'); }
+  if (res.status === 401) {
+    // 会话过期或被伪造：回登录页重新验证，别让用户对着一个存不进去的界面反复点
+    apiState = 'locked';
+    authState.authenticated = false;
+    goLogin(true);
+    throw new Error('会话已失效，正在返回登录页');
+  }
   if (!res.ok) {
     let detail = 'HTTP ' + res.status;
     try { const j = await res.json(); if (j && j.error) detail = j.error; } catch (_) {}
@@ -696,7 +714,7 @@ function setConnBadge() {
   if (!el) return;
   const map = {
     ready: ['is-ready', '● 已连接线上'],
-    locked: ['is-locked', '● 需要口令'],
+    locked: ['is-locked', '● 会话已失效'],
     offline: ['is-offline', '● 离线（改动不会保存）']
   };
   const [cls, text] = map[apiState] || map.offline;
@@ -707,26 +725,51 @@ function setConnBadge() {
     foot.innerHTML = apiState === 'ready'
       ? '内容保存在线上 KV<br>所有访客即时可见'
       : (apiState === 'locked'
-        ? '尚未验证口令<br>点右上「解锁」后可保存'
+        ? '会话已失效<br>请重新登录后再保存'
         : '接口不可用<br>当前仅本地预览，改动不会保存');
   }
 }
 
-// 解锁（输入管理口令）
-document.getElementById('unlock').addEventListener('click', async () => {
-  const input = prompt('请输入管理口令：', '');
-  if (input == null) return;
-  setToken(input.trim());
-  clearTimeout(saveTimer);
-  await saveData();
+// 退出登录：让服务端清掉会话 Cookie，再回登录页
+document.getElementById('logout').addEventListener('click', async () => {
+  try {
+    await fetch(AUTH_API, { method: 'DELETE', credentials: 'same-origin' });
+  } catch (e) {
+    // 请求失败也要走人，不能把用户困在后台里
+    console.warn('登出接口不可用：', e);
+  }
+  goLogin(false);
 });
 
-// 启动：先渲染默认内容，再拉线上内容覆盖
+// 启动：先渲染默认内容，再校验会话，最后拉线上内容覆盖
 renderAllItemLists();
 hydrateForm();
 setConnBadge();
 
 (async function bootstrap() {
+  // 第一步先问会话状态。中间件只看 Cookie 是否存在，挡不住伪造的 Cookie，
+  // 所以这里必须再问一次服务端（它才有 ADMIN_TOKEN，能验签名）。
+  if (hasBackend) {
+    try {
+      const res = await fetch(AUTH_API, { cache: 'no-store', credentials: 'same-origin' });
+      if (res.ok) authState = await res.json();
+    } catch (e) {
+      console.warn('身份接口不可用：', e);
+    }
+
+    if (!authState.authenticated) {
+      if (authState.configured) {
+        // 口令已配置但会话无效 → 去登录
+        goLogin(true);
+        return;
+      }
+      // 口令没配置：登录页也帮不上忙，留在这里把原因说清楚
+      apiState = 'locked';
+      showSaveStatus('服务端未配置 ADMIN_TOKEN，无法保存');
+      setConnBadge();
+    }
+  }
+
   try {
     data = await loadData();
     renderAllItemLists();
