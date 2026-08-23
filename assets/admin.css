@@ -220,7 +220,11 @@ a { color: inherit; text-decoration: none; }
   transition: border-color .2s var(--ease), background .2s var(--ease);
 }
 .field-card textarea { min-height: 72px; resize: vertical; }
-.field-card select { height: 35px; appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 15px) 15px, calc(100% - 10px) 15px; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 28px; cursor: pointer; }
+/* 下拉不写死 height：box-sizing 是 border-box，原来的 35px 扣掉 1px 边框和 9px 上下内边距
+   只剩 15px 内容盒，装不下 13px × 1.5 = 19.5px 的行高，中文字形上下会被裁掉。
+   改成和文本框一样靠 padding 撑开（19.5 + 18 + 2 ≈ 39.5px），两者高度也就自然对齐了。
+   箭头随之改用 50% 定位，不再依赖那个固定高度。 */
+.field-card select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 15px) calc(50% - 2px), calc(100% - 10px) calc(50% - 2px); background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 28px; cursor: pointer; }
 .field-card input[type="text"]:focus,
 .field-card select:focus,
 .field-card textarea:focus {

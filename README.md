@@ -39,7 +39,7 @@
 ├── login.html                 后台登录页（单文件，内联样式）
 ├── middleware.js              边缘中间件：未登录访问后台时跳登录页（仅体验，非安全边界）
 ├── assets/
-│   ├── admin.css              后台样式（531 行）
+│   ├── admin.css              后台样式（535 行）
 │   ├── admin.js               后台逻辑（1082 行）
 │   └── login.js               登录页逻辑
 ├── functions/
