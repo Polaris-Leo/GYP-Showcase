@@ -28,7 +28,7 @@ const STORE_NAME = 'gyp-assets';
  * 也不会因为存在这个公开路由而被人凭键名读出去。放宽成 `img/*` 或允许任意键，
  * 就等于把整个桶变成公开只读接口。
  */
-const KEY_RE = /^img\/[0-9a-f]{32}\.(png|jpg|webp|gif)$/;
+const KEY_RE = /^img\/[0-9a-f]{32}\.(png|jpg|webp|gif)$(?![\s\S])/;
 
 const MIME = {
   png: 'image/png',
