@@ -11,3 +11,7 @@ assets/gyp/
 # 那份产物不能入库（否则和源码打架）。用 edgeone CLI 本地跑过就会生成这两个目录。
 .edgeone/
 .tef_dist/
+
+# Blob SDK 的依赖。package.json 入库、依赖不入库：构建时由 EdgeOne 的「安装命令」
+# 执行 npm install 装上，而且 SDK 包里的凭据占位符要靠那次安装才被替换（见 README §7）。
+node_modules/

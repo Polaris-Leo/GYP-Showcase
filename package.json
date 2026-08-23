@@ -1,0 +1,8 @@
+{
+  "name": "gyp-showcase",
+  "private": true,
+  "description": "站点本身是纯静态的，这个 package.json 只为 Pages Functions 提供 Blob SDK 依赖。",
+  "dependencies": {
+    "@edgeone/pages-blob": "0.0.16"
+  }
+}

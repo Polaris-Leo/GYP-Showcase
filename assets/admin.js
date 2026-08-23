@@ -270,11 +270,159 @@ function updatePreview(input) {
   preview.appendChild(img);
 }
 
+// ───────── 图片上传（Pages Blob） ─────────
+//
+// 上传是**附加**功能，不替代原来的手填链接：字段仍然是一个普通文本框，
+// 上传成功只是帮你把 /img?key=… 填进去。所以图床链接、B 站装扮链接照样能用，
+// 而且万一 Blob 那边出问题，手填这条路一点没受影响。
+
+// ⚠️ 必须与 functions/api/upload.js 里的 MAX_BYTES 一致。
+// 超过这个大小就改走直传（预签名 PUT），因为函数收不下这么大的请求体。
+const UPLOAD_PROXY_MAX = 4 * 1024 * 1024;
+
+// ⚠️ 必须与 functions/api/upload.js 里的 TYPES 一致。
+// 故意不含 image/svg+xml：SVG 能内嵌脚本，同源加载等于存储型 XSS。
+const UPLOAD_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+
+const fmtSize = (n) =>
+  n >= 1024 * 1024 ? (n / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+
+async function sha256Hex(file) {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** 把响应里的错误话术取出来；不是 JSON 就退回状态码 */
+async function errText(res) {
+  try {
+    const body = await res.json();
+    if (body && body.error) return body.error;
+  } catch (_) { /* 落到下面 */ }
+  return 'HTTP ' + res.status;
+}
+
+async function uploadFile(file) {
+  if (file.size <= UPLOAD_PROXY_MAX) {
+    // 代理上传：同源 POST，请求体就是文件本身
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type },
+      body: file,
+      credentials: 'same-origin',
+    });
+    if (!res.ok) throw new Error(await errText(res));
+    return (await res.json()).url;
+  }
+
+  // 直传：先要一个预签名地址，再把字节直接 PUT 给 Blob。
+  // 服务端拿不到内容，算不了内容哈希，所以哈希在这里算好带上去。
+  const sha256 = await sha256Hex(file);
+  const signRes = await fetch('/api/upload?direct=1', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contentType: file.type, sha256 }),
+    credentials: 'same-origin',
+  });
+  if (!signRes.ok) throw new Error(await errText(signRes));
+  const signed = await signRes.json();
+
+  // 签名把方法/键名/有效期/Content-Type 绑在一起，PUT 时必须原样照发，少一个都会 403。
+  // 这一步是跨域请求，会先走 CORS 预检——预检过不去的话错误会含糊得多，所以单独提示。
+  let putRes;
+  try {
+    putRes = await fetch(signed.uploadUrl, { method: 'PUT', headers: signed.putHeaders, body: file });
+  } catch (e) {
+    throw new Error('直传被浏览器拦下（可能是 Blob 未放行跨域）。可先把图压到 ' +
+                    fmtSize(UPLOAD_PROXY_MAX) + ' 以内改走代理上传。');
+  }
+  if (!putRes.ok) throw new Error('直传失败：HTTP ' + putRes.status);
+  return signed.url;
+}
+
+/**
+ * 给每个图片链接输入框挂一个上传控件。
+ *
+ * 从 JS 注入而不是写进 HTML：图片字段一共三处——admin.html 里的主图，
+ * 加上周边物品与历史条目两个动态生成的字段。写死在模板里就要维护三份一样的标记，
+ * 而这里只认 data-type="image-src"，以后再加图片字段会自动带上上传控件。
+ */
+function attachUploaders(scope) {
+  (scope || document).querySelectorAll('input[data-type="image-src"]').forEach((input) => {
+    if (input.dataset.uploader === '1') return;
+    input.dataset.uploader = '1';
+
+    const row = document.createElement('div');
+    row.className = 'upload-row';
+
+    const picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = UPLOAD_TYPES.join(',');
+    picker.className = 'upload-file';
+    // 原生 file 控件样式无法统一，藏起来用按钮代劳；按钮点击时触发 picker.click()。
+    picker.hidden = true;
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm upload-btn';
+    btn.textContent = '上传图片';
+
+    const status = document.createElement('span');
+    status.className = 'upload-status';
+    // 上传结果要让读屏软件也念出来，否则失败提示只有看得见的人知道
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+
+    row.append(picker, btn, status);
+    // 插在输入框后面，属于同一张 field-card
+    input.insertAdjacentElement('afterend', row);
+
+    const setStatus = (text, kind) => {
+      status.textContent = text;
+      status.dataset.kind = kind || '';
+    };
+
+    btn.addEventListener('click', () => picker.click());
+
+    picker.addEventListener('change', async () => {
+      const file = picker.files && picker.files[0];
+      // 重置 value，否则再选同一个文件不会触发 change
+      picker.value = '';
+      if (!file) return;
+
+      if (!UPLOAD_TYPES.includes(file.type)) {
+        setStatus(
+          file.type === 'image/svg+xml'
+            ? '不收 SVG（可内嵌脚本），请先转成 PNG'
+            : '不支持的格式：' + (file.type || '未知'),
+          'bad'
+        );
+        return;
+      }
+
+      btn.disabled = true;
+      setStatus('上传中…（' + fmtSize(file.size) + '）');
+      try {
+        const url = await uploadFile(file);
+        input.value = url;
+        // 派发 input 事件，交给已有的绑定去做 updateValue / markChanged / updatePreview，
+        // 不在这里重复一遍那三件事——重复就会有一天忘记同步。
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        setStatus('已上传 · ' + fmtSize(file.size), 'ok');
+      } catch (e) {
+        setStatus((e && e.message) || '上传失败', 'bad');
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
 // 绑定输入（可重复调用；只给未绑定过的控件挂监听）
 function bindFields(scope) {
   (scope || document).querySelectorAll('[data-field]').forEach((input) => {
     if (input.dataset.bound === '1') return;
     input.dataset.bound = '1';
+
     input.addEventListener('input', () => {
       if (input.dataset.ym) {
         updateValue(input.dataset.field, readYm(input));
@@ -294,6 +442,9 @@ function bindFields(scope) {
       syncBlockTitle(input);
     });
   });
+  // 挂在 bindFields 末尾，是为了让两个调用点（启动时的 document、
+  // renderItemList 里的 host）自动都覆盖到，不用记得两处各调一次
+  attachUploaders(scope);
 }
 bindFields(document);
 
