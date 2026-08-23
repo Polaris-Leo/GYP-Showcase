@@ -276,28 +276,20 @@ function bindFields(scope) {
     if (input.dataset.bound === '1') return;
     input.dataset.bound = '1';
     input.addEventListener('input', () => {
-      // 下拉里的「＋ 新增…」只是个入口，不是一个值：展开输入行并把下拉退回原值，
-      // 这一次改动不写进数据。必须排在所有 updateValue 之前。
-      if (input.dataset.choice && isChoiceAdd(input)) {
-        openChoicePanel(input.closest('.field-choice'));
-        return;
-      }
-      // 记住这次选的真实值，下次点「＋ 新增…」时要退回到它
-      if (input.dataset.choice) input.dataset.prev = input.value;
       if (input.dataset.ym) {
         updateValue(input.dataset.field, readYm(input));
         const wrap = input.closest('.field-inline');
-        if (wrap) wrap.querySelectorAll('select').forEach((s) => s.classList.add('is-changed'));
+        if (wrap) wrap.querySelectorAll('select').forEach((s) => markChanged(s));
         return;
       }
       if (input.dataset.part != null) {
         // 一段变了要把同组各段读齐重拼，不能只写自己那一段
         updateValue(input.dataset.field, readParts(input));
-        input.classList.add('is-changed');
+        markChanged(input);
         return;
       }
       updateValue(input.dataset.field, input.value);
-      input.classList.add('is-changed');
+      markChanged(input);
       updatePreview(input);
       syncBlockTitle(input);
     });
@@ -401,7 +393,8 @@ function buildYmSelect(path, part) {
   } else {
     for (let m = 1; m <= 12; m++) addOpt(pad2(m), pad2(m) + ' 月');
   }
-  return sel;
+  // 年月也走自绘下拉，否则同一张卡里有的列表是系统默认长相、有的是自绘的
+  return decorateSelect(sel);
 }
 
 function ymParts(value) {
@@ -419,6 +412,7 @@ function setYmSelect(sel, raw) {
     sel.insertBefore(opt, sel.firstChild);
   }
   sel.value = want;
+  syncDropdown(sel);
 }
 
 function readYm(sel) {
@@ -524,17 +518,9 @@ function choiceOptions(groupName) {
   return collectChoiceValues(data, g.section, g.orderKey, g.key, g.derive);
 }
 
-// 「＋ 新增…」是下拉列表里的最后一项，不是下拉外面的按钮。
-// 它的值只在页面内部用来识别「用户点了新增」，绝不会被写进数据。
-const CHOICE_ADD = '__ADD_NEW__';
-
-// 认 data-choice-add 而不是只比字符串：万一哪天用户真把某个选项取名成
-// 「__ADD_NEW__」，真实选项排在哨兵前面，也不会被误判成新增。
-function isChoiceAdd(sel) {
-  const opt = sel.options[sel.selectedIndex];
-  return !!(opt && opt.dataset.choiceAdd);
-}
-
+// 选项列表由数据派生，列表里**没有**哨兵项：「新增」是自绘面板底部那一行
+// 常驻输入框，不是列表里的一个假选项。所以原来那套 __ADD_NEW__ 的识别、
+// 回退到 dataset.prev、以及三道「别把哨兵当真值存进去」的防护全部不再需要。
 function paintChoiceOptions(sel) {
   sel.textContent = '';
   choiceOptions(sel.dataset.choice).forEach((v) => {
@@ -543,17 +529,10 @@ function paintChoiceOptions(sel) {
     opt.textContent = v;
     sel.appendChild(opt);
   });
-  const g = choiceGroups[sel.dataset.choice];
-  const add = document.createElement('option');
-  add.value = CHOICE_ADD;
-  add.dataset.choiceAdd = '1';
-  add.textContent = '＋ ' + ((g && g.addLabel) || '新增选项') + '…';
-  sel.appendChild(add);
 }
 
 // 数据里的值不在选项表里（导入的 JSON、或值为空）时就地补一个并选中，
 // 绝不静默把用户已有的值改写成第一个选项。
-// 同时记下当前值：用户点了下拉里的「＋ 新增…」之后要靠它退回原来的选择。
 function setChoiceSelect(sel, raw) {
   const want = String(raw == null ? '' : raw);
   if (![...sel.options].some((o) => o.value === want)) {
@@ -563,35 +542,116 @@ function setChoiceSelect(sel, raw) {
     sel.insertBefore(opt, sel.firstChild);
   }
   sel.value = want;
-  sel.dataset.prev = want;
+  syncDropdown(sel);
+}
+
+// ── 自绘下拉 ──
+// 原生 <select> 的弹出列表是浏览器自己画的：既塞不进输入框，CSS 也管不到它的样式。
+// 要「列表底部就是输入框」+「列表不能是系统默认长相」，只能整个列表自己画。
+//
+// 关键取舍：原生 select 留着不动，只是 display:none，继续当唯一数据源。
+// 于是 data-field / bindFields / readParts / readYm / setChoiceSelect / 派生选项
+// 那一整套链路一行都不用改；自绘面板只做一件事——改 select.value 再派发 input 事件，
+// 等于替用户在原生下拉上点了一下。数据语义因此完全不变。
+function decorateSelect(sel, group) {
+  const wrap = document.createElement('div');
+  wrap.className = 'dropdown';
+
+  const trigger = document.createElement('button');
+  trigger.type = 'button';
+  trigger.className = 'dd-trigger';
+  trigger.dataset.ddTrigger = '1';
+  trigger.setAttribute('aria-haspopup', 'true');
+  trigger.setAttribute('aria-expanded', 'false');
+  const label = sel.getAttribute('aria-label');
+  if (label) trigger.setAttribute('aria-label', label);
+  const valueEl = document.createElement('span');
+  valueEl.className = 'dd-value';
+  valueEl.dataset.ddValue = '1';
+  trigger.appendChild(valueEl);
+
+  const panel = document.createElement('div');
+  panel.className = 'dd-panel';
+  panel.hidden = true;
+  const list = document.createElement('div');
+  list.className = 'dd-list';
+  list.dataset.ddList = '1';
+  panel.appendChild(list);
+
+  // 可增选项的组：列表底部固定一行输入框。它就是「新增」本身，
+  // 不是需要先点开的入口——面板一展开它就在那儿，打字回车即加入。
+  // 故意不带 data-field，bindFields（选择器是 [data-field]）不会绑它，
+  // 所以敲字的过程不会被当成字段修改写进数据。
+  if (group) {
+    wrap.dataset.addable = '1';
+    const add = document.createElement('div');
+    add.className = 'dd-add';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = group.placeholder;
+    input.dataset.choiceInput = '1';
+    input.setAttribute('aria-label', group.addLabel);
+    input.title = group.addLabel + '：' + (group.example || '') + '（回车加入）';
+    add.appendChild(input);
+    panel.appendChild(add);
+  }
+
+  wrap.append(sel, trigger, panel);
+  // 用键盘直接操作原生 select、或我们自己派发 input 时，都要同步自绘显示
+  sel.addEventListener('input', () => syncDropdown(sel));
+  syncDropdown(sel);
+  return wrap;
+}
+
+// 自绘部分只反映 select 的状态，不自己记状态。
+// is-changed 也要镜像过来：select 是 display:none 的，那个「这项改过」的底色
+// 必须画在自绘按钮上，否则用户完全看不出自己动过哪些字段。
+function syncDropdown(sel) {
+  const wrap = sel.closest ? sel.closest('.dropdown') : null;
+  if (!wrap) return;
+  const opt = sel.options[sel.selectedIndex];
+  const valueEl = wrap.querySelector('[data-dd-value]');
+  valueEl.textContent = opt ? opt.textContent : '';
+  // 空值时 setChoiceSelect 会补一个「—（未填写）」，那不是真内容，调淡
+  valueEl.classList.toggle('is-empty', !String(sel.value).trim());
+  wrap.classList.toggle('is-changed', sel.classList.contains('is-changed'));
+}
+
+// 「改过」的标记要同时落到自绘按钮上，否则画在 display:none 的 select 上没人看见
+function markChanged(el) {
+  el.classList.add('is-changed');
+  if (el.tagName === 'SELECT') syncDropdown(el);
+}
+
+// 列表每次展开都重画：可增选项是从数据里派生的，别的卡片一改它就变，
+// 缓存下来必然过期。行用真的 <button>——Tab 能走到、回车能激活、
+// 焦点框浏览器自带，不需要自己实现一套 roving tabindex。
+function renderDropdownList(wrap) {
+  const sel = wrap.querySelector('select');
+  const list = wrap.querySelector('[data-dd-list]');
+  list.textContent = '';
+  [...sel.options].forEach((opt) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'dd-option';
+    row.dataset.ddOption = opt.value;
+    row.textContent = opt.textContent;
+    if (opt.value === sel.value) {
+      row.classList.add('is-on');
+      row.setAttribute('aria-current', 'true');
+    }
+    list.appendChild(row);
+  });
 }
 
 function buildChoiceControl(field, path) {
-  const g = choiceGroups[field.choice];
-  const wrap = document.createElement('div');
-  wrap.className = 'field-choice';
-
   const sel = document.createElement('select');
   sel.dataset.field = path;
   sel.dataset.type = 'text';
   sel.dataset.choice = field.choice;
   sel.setAttribute('aria-label', field.label);
   paintChoiceOptions(sel);
-
-  // 新增选项的输入框就地顶替下拉本身，不在下方另起一行：平时 hidden，
-  // 在下拉里选了「＋ 新增…」之后换成它，输完回车／点到别处就落库。
-  // 故意不带 data-field，bindFields（选择器是 [data-field]）不会绑它，
-  // 所以敲字的过程不会被当成字段修改写进数据。
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.hidden = true;
-  input.placeholder = g.placeholder;
-  input.dataset.choiceInput = '1';
-  input.setAttribute('aria-label', g.addLabel);
-  input.title = g.addLabel + '：' + (g.example || '') + '（回车确认，Esc 取消）';
-
-  wrap.append(sel, input);
-  return wrap;
+  return decorateSelect(sel, choiceGroups[field.choice]);
 }
 
 // 把四个可增选项下拉拼成一个字段：每个下拉带 data-part=段序号，
@@ -631,50 +691,62 @@ function partInputError(sel, value) {
   return '';
 }
 
-// 切到输入态的同时必须把下拉退回原来的值：哨兵项只是个入口，
-// 绝不能让 '__ADD_NEW__' 停在下拉上——那样一存就把它当成真值写进数据了。
-function openChoicePanel(wrap) {
-  const sel = wrap.querySelector('select');
-  const input = wrap.querySelector('[data-choice-input]');
-  sel.value = sel.dataset.prev == null ? '' : sel.dataset.prev;
-  sel.hidden = true;
-  input.hidden = false;
-  input.value = '';
-  // 样式靠这个 class 认「正在新增」：左边那道 accent 竖条和「＋」都画在 wrap 上，
-  // 不用 :has() 也不用给输入框塞额外元素，切回下拉时一点痕迹都不留。
-  wrap.classList.add('is-adding');
-  input.focus();
+function openDropdown(wrap) {
+  // 同时只允许开一个：两个绝对定位的面板叠在一起没法用。
+  // 关掉别的用 'away'，语义和「点到别处」一致——那边没提交的输入不会被丢掉。
+  document.querySelectorAll('.dropdown.is-open').forEach((other) => {
+    if (other !== wrap) closeDropdown(other, 'away');
+  });
+  renderDropdownList(wrap);
+  wrap.dataset.ddOpen = '1';
+  wrap.classList.add('is-open');
+  wrap.querySelector('[data-dd-trigger]').setAttribute('aria-expanded', 'true');
+  wrap.querySelector('.dd-panel').hidden = false;
 }
 
-// keyboard=true 表示这次收起来自回车／Esc，可以把焦点还给下拉；
-// 来自失焦时必须传 false，否则会把焦点从用户刚点的那个元素上抢回来。
-// 一并清掉输入内容：收起输入框本身会再触发一次 blur，清空后那次就是空值，
-// 走「放弃新增」分支，不会重复提交。
-function closeChoicePanel(wrap, keyboard) {
-  const sel = wrap.querySelector('select');
+// reason 决定底部那行没提交的输入怎么处理，三种来源语义不同：
+//   'pick'  选了列表里的某一项，或刚提交完 —— 用户改了主意，输入作废
+//   'esc'   按了 Esc —— 明确取消，输入作废
+//   'away'  焦点／鼠标离开了整个下拉 —— 沿用「输完直接点走就落库」的约定，
+//           这里必须提交，不能悄悄把用户打的字丢掉
+function closeDropdown(wrap, reason) {
+  if (!wrap || wrap.dataset.ddOpen !== '1') return;
   const input = wrap.querySelector('[data-choice-input]');
-  input.value = '';
-  input.hidden = true;
-  sel.hidden = false;
-  wrap.classList.remove('is-adding');
-  if (keyboard) sel.focus();
+  if (reason === 'away' && input && input.value.trim() && !wrap.dataset.choiceBusy) {
+    commitChoice(wrap);  // 它成功后自己会带着 'pick' 收起面板
+    return;
+  }
+  delete wrap.dataset.ddOpen;
+  wrap.classList.remove('is-open');
+  wrap.querySelector('[data-dd-trigger]').setAttribute('aria-expanded', 'false');
+  wrap.querySelector('.dd-panel').hidden = true;
+  if (input) input.value = '';
 }
 
-function commitChoice(wrap, keyboard) {
+// 点列表里的一项 = 替用户在原生 select 上选中它：改完值派发 input 事件，
+// 后面写数据／排队保存／预览／标题同步那条链路（bindFields）完全复用。
+// 值没变就不派发，免得点一下自己已选中的项也记一次改动。
+function pickOption(wrap, value) {
+  const sel = wrap.querySelector('select');
+  if (sel.value !== value) {
+    sel.value = value;
+    sel.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  closeDropdown(wrap, 'pick');
+  wrap.querySelector('[data-dd-trigger]').focus();
+}
+
+// 只有一条提交路径了：底部输入框回车，或者带着未提交的内容离开这个下拉。
+function commitChoice(wrap) {
   if (wrap.dataset.choiceBusy) return;
   const sel = wrap.querySelector('select');
   const input = wrap.querySelector('[data-choice-input]');
   const value = input.value.trim();
-  if (!value) {
-    // 回车时空着，说明是想提交但没输入，提示并留在输入态；
-    // 失焦时空着，说明只是点开又点走了，直接当放弃处理，不要弹提示。
-    if (keyboard) { showSaveStatus('请先输入选项名称'); input.focus(); return; }
-    closeChoicePanel(wrap, false);
-    return;
-  }
+  // 空着回车说明想提交但没输入：提示并留在原地，面板不收
+  if (!value) { showSaveStatus('请先输入选项名称'); input.focus(); return; }
   const err = partInputError(sel, value);
-  // 校验不过就保留输入态和已输入的内容，让用户能直接改；失焦触发时不抢焦点
-  if (err) { showSaveStatus(err); if (keyboard) input.focus(); return; }
+  // 校验不过就保留面板和已输入的内容，让用户能直接改
+  if (err) { showSaveStatus(err); input.focus(); return; }
   // 必须在 updateValue 之前问：写下去之后这个值就能被派生出来了，届时一律显示"已有"
   const existed = choiceOptions(sel.dataset.choice).indexOf(value) >= 0;
   wrap.dataset.choiceBusy = '1';
@@ -683,14 +755,14 @@ function commitChoice(wrap, keyboard) {
   // 再写进数据：走和手动选择完全相同的链路（排队保存）。
   // 必须先写，choiceOptions 才能把这个新值推导出来。
   updateValue(sel.dataset.field, sel.dataset.part == null ? value : readParts(sel));
-  sel.classList.add('is-changed');
+  markChanged(sel);
   // 同组所有下拉一起重绘，新选项在每个下拉里的排序保持一致
   document.querySelectorAll('select[data-choice="' + sel.dataset.choice + '"]').forEach((other) => {
     const keep = other === sel ? value : other.value;
     paintChoiceOptions(other);
     setChoiceSelect(other, keep);
   });
-  closeChoicePanel(wrap, keyboard);
+  closeDropdown(wrap, 'pick');
   delete wrap.dataset.choiceBusy;
   // 输进来的名字可能本来就有（同组别的条目在用），那就是"选用"而不是"新增"，别谎报
   showSaveStatus((existed ? '已选用选项「' : '已加入选项「') + value + '」');
@@ -706,7 +778,7 @@ function buildControl(field, path) {
     return el;
   }
   if (field.kind === 'choice') {
-    // 复合控件：下拉（含「＋ 新增…」那一项）+ 就地顶替它的新增输入框
+    // 复合控件：原生 select（数据源）+ 自绘列表，列表底部常驻新增输入框
     return buildChoiceControl(field, path);
   }
   if (field.kind === 'parts') {
@@ -721,6 +793,11 @@ function buildControl(field, path) {
       opt.textContent = text;
       el.appendChild(opt);
     });
+    // 固定选项的下拉（如展厅分类）没有新增输入框，但列表一样要自绘
+    el.dataset.field = path;
+    el.dataset.type = 'text';
+    el.setAttribute('aria-label', field.label);
+    return decorateSelect(el);
   } else if (field.kind === 'textarea') {
     el = document.createElement('textarea');
   } else {
@@ -916,21 +993,50 @@ document.querySelector('.admin-content').addEventListener('click', (event) => {
   if (move) moveItem(name, id, move.dataset.itemMove === 'up' ? -1 : 1);
 });
 
-// 新增选项：切到输入态由下拉里的「＋ 新增…」触发（见 bindFields），
-// 落库只有两条路——回车，或者失焦（输完直接点到别处）。没有按钮。
-// focusout 会冒泡（blur 不会），所以监听 focusout。
-document.querySelector('.admin-content').addEventListener('focusout', (event) => {
-  const input = event.target.closest ? event.target.closest('[data-choice-input]') : null;
-  if (!input || input.hidden) return;
-  commitChoice(input.closest('.field-choice'), false);
+// 自绘下拉：点按钮开合，点列表项选中。列表项是真的 <button>，
+// 所以 Tab 走位和回车激活都由浏览器负责，这里只管点击。
+document.querySelector('.admin-content').addEventListener('click', (event) => {
+  const trigger = event.target.closest('[data-dd-trigger]');
+  if (trigger) {
+    const wrap = trigger.closest('.dropdown');
+    if (wrap.dataset.ddOpen === '1') closeDropdown(wrap, 'pick');
+    else openDropdown(wrap);
+    return;
+  }
+  const opt = event.target.closest('[data-dd-option]');
+  if (opt) pickOption(opt.closest('.dropdown'), opt.dataset.ddOption);
 });
 
 document.querySelector('.admin-content').addEventListener('keydown', (event) => {
-  const input = event.target.closest('[data-choice-input]');
-  if (!input) return;
-  const wrap = input.closest('.field-choice');
-  if (event.key === 'Enter') { event.preventDefault(); commitChoice(wrap, true); }
-  else if (event.key === 'Escape') { event.preventDefault(); closeChoicePanel(wrap, true); }
+  const wrap = event.target.closest('.dropdown');
+  if (!wrap) return;
+  if (event.target.closest('[data-choice-input]') && event.key === 'Enter') {
+    event.preventDefault();
+    commitChoice(wrap);
+    return;
+  }
+  if (event.key === 'Escape' && wrap.dataset.ddOpen === '1') {
+    event.preventDefault();
+    closeDropdown(wrap, 'esc');
+    wrap.querySelector('[data-dd-trigger]').focus();
+  }
+});
+
+// 焦点整个离开这个下拉才收起——在面板里 Tab（列表项 → 输入框）不算离开，
+// 所以要看 relatedTarget 是不是还在 wrap 内。为空（点到不可聚焦处）算离开。
+document.querySelector('.admin-content').addEventListener('focusout', (event) => {
+  const wrap = event.target.closest ? event.target.closest('.dropdown') : null;
+  if (!wrap || wrap.dataset.ddOpen !== '1') return;
+  if (event.relatedTarget && wrap.contains(event.relatedTarget)) return;
+  closeDropdown(wrap, 'away');
+});
+
+// 点页面别处也要收起。mousedown 比 focusout 早，且能覆盖「点在不可聚焦元素上」
+// 这种 focusout 根本不触发的情况。收起走 'away'，未提交的输入照样落库。
+document.addEventListener('mousedown', (event) => {
+  document.querySelectorAll('.dropdown.is-open').forEach((wrap) => {
+    if (!wrap.contains(event.target)) closeDropdown(wrap, 'away');
+  });
 });
 
 // 侧边栏切换

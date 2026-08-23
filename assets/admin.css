@@ -208,6 +208,7 @@ a { color: inherit; text-decoration: none; }
 .field-hint { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.6; }
 .field-card input[type="text"],
 .field-card select,
+.field-card .dd-trigger,
 .field-card textarea {
   width: 100%;
   border: 1px solid var(--border);
@@ -220,71 +221,145 @@ a { color: inherit; text-decoration: none; }
   transition: border-color .2s var(--ease), background .2s var(--ease);
 }
 .field-card textarea { min-height: 72px; resize: vertical; }
-/* 下拉不写死 height：box-sizing 是 border-box，原来的 35px 扣掉 1px 边框和 9px 上下内边距
-   只剩 15px 内容盒，装不下 13px × 1.5 = 19.5px 的行高，中文字形上下会被裁掉。
-   改成和文本框一样靠 padding 撑开（19.5 + 18 + 2 ≈ 39.5px），两者高度也就自然对齐了。
-   箭头随之改用 50% 定位，不再依赖那个固定高度。 */
-.field-card select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 15px) calc(50% - 2px), calc(100% - 10px) calc(50% - 2px); background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 28px; cursor: pointer; }
+/* 谁都不写死 height：box-sizing 是 border-box，早先给下拉写的 35px 扣掉 1px 边框
+   和 9px 上下内边距只剩 15px 内容盒，装不下 13px × 1.5 = 19.5px 的行高，中文字形
+   上下会被裁掉。统一靠 padding 撑开（19.5 + 18 + 2 ≈ 39.5px），自绘的下拉按钮
+   因为吃的是同一条规则，高度自然和文本框对齐。 */
 .field-card input[type="text"]:focus,
-.field-card select:focus,
 .field-card textarea:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
   border-color: var(--accent);
 }
+/* 下拉按钮用 :focus-visible：鼠标点开面板时不该再套一个焦点框，
+   展开状态已经由边框换成 accent 表示了。 */
+.field-card .dd-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
 .field-card input[type="text"].is-changed,
-.field-card select.is-changed,
-.field-card textarea.is-changed {
+.field-card textarea.is-changed,
+.field-card .dropdown.is-changed .dd-trigger {
   background: oklch(0.96 0.02 257 / .35);
   border-color: oklch(0.72 0.08 257);
 }
 
 /* 年月两个下拉并排占一行 */
 .field-inline { display: flex; gap: 8px; }
-.field-inline select { flex: 1 1 0; min-width: 0; }
+.field-inline > .dropdown { flex: 1 1 0; min-width: 0; }
 
-/* 可增选项的下拉：「＋ 新增…」是下拉列表里的最后一项，旁边没有按钮。
-   选中它之后，输入框**就地顶替下拉本身**（不在下方另起一行），输完回车
-   或点到别处就落库，所以也不需要「加入并选用 / 取消」两个按钮。
-   两者都吃 .field-card 的输入框样式，尺寸一致，切换时框不会跳。 */
-.field-choice { position: relative; display: flex; flex-direction: column; }
-.field-choice > select,
-.field-choice > input[type="text"] { width: 100%; }
+/* ── 自绘下拉 ──
+   原生 <select> 的弹出列表是浏览器画的：塞不进输入框，样式也改不了。
+   所以 select 只留着当数据源并藏起来，列表整个自己画。
+   祖先里没有 overflow:hidden（查过，只在缩略图上有），面板可以放心浮出去。 */
+.dropdown { position: relative; }
+.dropdown > select { display: none; }
 
-/* 新增态：不能让它长得和普通输入框一样，否则用户不知道自己在录入新选项。
-   左边一格「＋」呼应刚点的那一项，底色轻微带 accent，边框和光标也换成 accent。
-   「＋」画在 wrap 的 ::before 上（wrap 是 position:relative），输入框只负责
-   让出左边的位置——收起时 class 一去，痕迹全无。 */
-.field-choice > input[data-choice-input] {
-  padding-left: 34px;
-  border-color: var(--accent);
-  background: oklch(0.985 0.012 257);
-  caret-color: var(--accent);
-  letter-spacing: .01em;
+/* 触发按钮的盒子已经并进上面那条共用规则，和文本框逐像素一致；
+   这里只补按钮特有的部分。右侧 28px 留给箭头。 */
+.field-card .dd-trigger {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  padding-right: 28px;
+  cursor: pointer;
 }
-/* 提示文字别调太淡：0.7 那档量出来最深只有 162 亮度，比旁边装饰性的「＋」还浅，
-   和底色对比不到 2.5:1，看着像控件被禁用了。压到 0.62 约 3.3:1，
-   仍明显比已输入的正文（量到 41）浅，主次分得清。 */
-.field-choice > input[data-choice-input]::placeholder {
-  color: oklch(0.62 0.05 257);
-  letter-spacing: 0;
+.dd-value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 空值时 setChoiceSelect 会补一个「—（未填写）」占位，那不是真内容，调淡区分 */
+.dd-value.is-empty { color: var(--muted); }
+/* 箭头是两条边转 45° 拼出来的，展开时翻上去 */
+.dd-trigger::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -4px;
+  border-right: 1px solid var(--muted);
+  border-bottom: 1px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform .18s var(--ease);
 }
-.field-choice.is-adding::before {
+.dropdown.is-open .dd-trigger::after { transform: rotate(-135deg); margin-top: -1px; }
+.field-card .dropdown.is-open .dd-trigger { border-color: var(--accent); }
+
+.dd-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  box-shadow: 0 1px 2px oklch(0 0 0 / .05), 0 10px 28px oklch(0 0 0 / .11);
+}
+/* 年月有十几项，超出就在面板内滚动，不要把卡片撑长 */
+.dd-list { max-height: 216px; overflow-y: auto; padding: 4px; }
+.dd-option {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: none;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  transition: background .14s var(--ease);
+}
+.dd-option:hover { background: var(--surface); }
+.dd-option:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* 当前值：换 accent 色并在右侧打勾，不靠底色差异硬认 */
+.dd-option.is-on { color: var(--accent); background: oklch(0.965 0.018 257); }
+.dd-option.is-on::after { content: "✓"; font-size: 11px; flex: 0 0 auto; }
+
+/* 列表底部常驻的新增输入框——它就是「新增」本身，不是入口。
+   和列表之间一条分隔线，底色比列表深一档，左边一格「＋」表明这里是在录入新选项。 */
+.dd-add { position: relative; border-top: 1px solid var(--border); background: var(--surface); padding: 6px; }
+.dd-add::before {
   content: "＋";
   position: absolute;
-  left: 1px;
-  top: 1px;
-  bottom: 1px;
-  width: 25px;
+  left: 7px;
+  top: 7px;
+  bottom: 7px;
+  width: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
   line-height: 1;
   color: var(--accent);
-  background: oklch(0.94 0.035 257);
-  border-right: 1px solid oklch(0.53 0.12 257 / .28);
   pointer-events: none;
+}
+.dd-add input[type="text"] {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  padding: 7px 10px 7px 33px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--fg);
+  transition: border-color .2s var(--ease), background .2s var(--ease);
+}
+/* 提示文字别调太淡：0.7 那档量出来最深只有 162 亮度，比旁边装饰性的「＋」还浅，
+   和底色对比不到 2.5:1，看着像控件被禁用了。0.62 实测 rgb(115,136,165)、
+   对白底 3.62:1，仍明显比已输入的正文（量到 41）浅，主次分得清。
+   注：它对底色的对比度仍低于正文要求的 4.5:1——placeholder 只是提示，
+   字段名在框外另有 .field-label，不靠它承载信息。 */
+.dd-add input[type="text"]::placeholder { color: oklch(0.62 0.05 257); }
+.dd-add input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: oklch(0.985 0.012 257);
+  caret-color: var(--accent);
 }
 
 /* 分段字段（编号/类型）：每段一个带小标题的可增选项下拉。
