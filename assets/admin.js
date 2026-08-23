@@ -476,37 +476,45 @@ function collectChoiceValues(source, section, orderKey, key, derive) {
 }
 
 // meta 四段各自一个选项组，段值靠 derive 从整串里抽出来
+// placeholder 要短：分段下拉那一列只有约 170px，减掉左边「＋」的位置和右内边距
+// 只剩 120 出头，写成「输入新的状态，例如…」必然被截断成省略号，比没有提示更难看。
+// 举例挪到 example，和操作提示一起挂在 title 上，鼠标停一下就能看到。
 const choiceGroups = {
   'archive-category': {
     section: 'archive',
     orderKey: 'itemOrder',
     key: 'category',
     addLabel: '新增类别',
-    placeholder: '输入新的类别，例如「亚克力挂件」'
+    placeholder: '新的类别名称',
+    example: '例如「亚克力挂件」'
   },
   'merch-meta-state': {
     section: 'home', orderKey: 'merchOrder', key: 'meta',
     derive: (v) => metaParts(v)[0],
     addLabel: '新增状态',
-    placeholder: '输入新的状态，例如「已开售」'
+    placeholder: '新的状态',
+    example: '例如「已开售」'
   },
   'merch-meta-kind': {
     section: 'home', orderKey: 'merchOrder', key: 'meta',
     derive: (v) => metaParts(v)[1],
     addLabel: '新增品类',
-    placeholder: '输入新的品类，例如「金属徽章」'
+    placeholder: '新的品类',
+    example: '例如「金属徽章」'
   },
   'merch-meta-price': {
     section: 'home', orderKey: 'merchOrder', key: 'meta',
     derive: (v) => metaParts(v)[2],
     addLabel: '新增售价',
-    placeholder: '输入新的售价说明，例如「¥68」'
+    placeholder: '新的售价',
+    example: '例如「¥68」'
   },
   'merch-meta-how': {
     section: 'home', orderKey: 'merchOrder', key: 'meta',
     derive: (v) => metaParts(v)[3],
     addLabel: '新增方式',
-    placeholder: '输入新的获得方式，例如「线下会场限定」'
+    placeholder: '新的获得方式',
+    example: '例如「线下会场限定」'
   }
 };
 
@@ -570,28 +578,19 @@ function buildChoiceControl(field, path) {
   sel.setAttribute('aria-label', field.label);
   paintChoiceOptions(sel);
 
-  // 输入行平时是收起的，只有在下拉里选了「＋ 新增…」之后才出现
-  const panel = document.createElement('div');
-  panel.className = 'choice-new';
-  panel.hidden = true;
+  // 新增选项的输入框就地顶替下拉本身，不在下方另起一行：平时 hidden，
+  // 在下拉里选了「＋ 新增…」之后换成它，输完回车／点到别处就落库。
+  // 故意不带 data-field，bindFields（选择器是 [data-field]）不会绑它，
+  // 所以敲字的过程不会被当成字段修改写进数据。
   const input = document.createElement('input');
   input.type = 'text';
+  input.hidden = true;
   input.placeholder = g.placeholder;
   input.dataset.choiceInput = '1';
   input.setAttribute('aria-label', g.addLabel);
-  const commit = document.createElement('button');
-  commit.type = 'button';
-  commit.className = 'btn btn-sm btn-primary';
-  commit.dataset.choiceCommit = '1';
-  commit.textContent = '加入并选用';
-  const cancel = document.createElement('button');
-  cancel.type = 'button';
-  cancel.className = 'btn btn-sm';
-  cancel.dataset.choiceCancel = '1';
-  cancel.textContent = '取消';
-  panel.append(input, commit, cancel);
+  input.title = g.addLabel + '：' + (g.example || '') + '（回车确认，Esc 取消）';
 
-  wrap.append(sel, panel);
+  wrap.append(sel, input);
   return wrap;
 }
 
@@ -632,32 +631,53 @@ function partInputError(sel, value) {
   return '';
 }
 
-// 打开输入行的同时必须把下拉退回原来的值：哨兵项只是个入口，
+// 切到输入态的同时必须把下拉退回原来的值：哨兵项只是个入口，
 // 绝不能让 '__ADD_NEW__' 停在下拉上——那样一存就把它当成真值写进数据了。
 function openChoicePanel(wrap) {
   const sel = wrap.querySelector('select');
   const input = wrap.querySelector('[data-choice-input]');
   sel.value = sel.dataset.prev == null ? '' : sel.dataset.prev;
-  sel.setAttribute('aria-expanded', 'true');
-  wrap.querySelector('.choice-new').hidden = false;
+  sel.hidden = true;
+  input.hidden = false;
   input.value = '';
+  // 样式靠这个 class 认「正在新增」：左边那道 accent 竖条和「＋」都画在 wrap 上，
+  // 不用 :has() 也不用给输入框塞额外元素，切回下拉时一点痕迹都不留。
+  wrap.classList.add('is-adding');
   input.focus();
 }
 
-function closeChoicePanel(wrap) {
+// keyboard=true 表示这次收起来自回车／Esc，可以把焦点还给下拉；
+// 来自失焦时必须传 false，否则会把焦点从用户刚点的那个元素上抢回来。
+// 一并清掉输入内容：收起输入框本身会再触发一次 blur，清空后那次就是空值，
+// 走「放弃新增」分支，不会重复提交。
+function closeChoicePanel(wrap, keyboard) {
   const sel = wrap.querySelector('select');
-  wrap.querySelector('.choice-new').hidden = true;
-  sel.setAttribute('aria-expanded', 'false');
-  sel.focus();
+  const input = wrap.querySelector('[data-choice-input]');
+  input.value = '';
+  input.hidden = true;
+  sel.hidden = false;
+  wrap.classList.remove('is-adding');
+  if (keyboard) sel.focus();
 }
 
-function commitChoice(wrap) {
+function commitChoice(wrap, keyboard) {
+  if (wrap.dataset.choiceBusy) return;
   const sel = wrap.querySelector('select');
   const input = wrap.querySelector('[data-choice-input]');
   const value = input.value.trim();
-  if (!value) { input.focus(); showSaveStatus('请先输入选项名称'); return; }
+  if (!value) {
+    // 回车时空着，说明是想提交但没输入，提示并留在输入态；
+    // 失焦时空着，说明只是点开又点走了，直接当放弃处理，不要弹提示。
+    if (keyboard) { showSaveStatus('请先输入选项名称'); input.focus(); return; }
+    closeChoicePanel(wrap, false);
+    return;
+  }
   const err = partInputError(sel, value);
-  if (err) { input.focus(); showSaveStatus(err); return; }
+  // 校验不过就保留输入态和已输入的内容，让用户能直接改；失焦触发时不抢焦点
+  if (err) { showSaveStatus(err); if (keyboard) input.focus(); return; }
+  // 必须在 updateValue 之前问：写下去之后这个值就能被派生出来了，届时一律显示"已有"
+  const existed = choiceOptions(sel.dataset.choice).indexOf(value) >= 0;
+  wrap.dataset.choiceBusy = '1';
   // 先把新值落到这个下拉上：分段字段要靠 readParts 读到它才能拼出完整字符串
   setChoiceSelect(sel, value);
   // 再写进数据：走和手动选择完全相同的链路（排队保存）。
@@ -670,8 +690,10 @@ function commitChoice(wrap) {
     paintChoiceOptions(other);
     setChoiceSelect(other, keep);
   });
-  closeChoicePanel(wrap);
-  showSaveStatus('已加入选项「' + value + '」');
+  closeChoicePanel(wrap, keyboard);
+  delete wrap.dataset.choiceBusy;
+  // 输进来的名字可能本来就有（同组别的条目在用），那就是"选用"而不是"新增"，别谎报
+  showSaveStatus((existed ? '已选用选项「' : '已加入选项「') + value + '」');
 }
 
 function buildControl(field, path) {
@@ -684,7 +706,7 @@ function buildControl(field, path) {
     return el;
   }
   if (field.kind === 'choice') {
-    // 复合控件：下拉（含「＋ 新增…」那一项）+ 折叠的新增输入行
+    // 复合控件：下拉（含「＋ 新增…」那一项）+ 就地顶替它的新增输入框
     return buildChoiceControl(field, path);
   }
   if (field.kind === 'parts') {
@@ -894,22 +916,21 @@ document.querySelector('.admin-content').addEventListener('click', (event) => {
   if (move) moveItem(name, id, move.dataset.itemMove === 'up' ? -1 : 1);
 });
 
-// 新增选项行的提交／取消。展开由下拉里的「＋ 新增…」触发（见 bindFields），
-// 这里只管两个按钮。新增行里的输入框故意不带 data-field，
-// 不会被 bindFields 绑上、也不会写进数据。
-document.querySelector('.admin-content').addEventListener('click', (event) => {
-  const wrap = event.target.closest('.field-choice');
-  if (!wrap) return;
-  if (event.target.closest('[data-choice-commit]')) { commitChoice(wrap); return; }
-  if (event.target.closest('[data-choice-cancel]')) closeChoicePanel(wrap);
+// 新增选项：切到输入态由下拉里的「＋ 新增…」触发（见 bindFields），
+// 落库只有两条路——回车，或者失焦（输完直接点到别处）。没有按钮。
+// focusout 会冒泡（blur 不会），所以监听 focusout。
+document.querySelector('.admin-content').addEventListener('focusout', (event) => {
+  const input = event.target.closest ? event.target.closest('[data-choice-input]') : null;
+  if (!input || input.hidden) return;
+  commitChoice(input.closest('.field-choice'), false);
 });
 
 document.querySelector('.admin-content').addEventListener('keydown', (event) => {
   const input = event.target.closest('[data-choice-input]');
   if (!input) return;
   const wrap = input.closest('.field-choice');
-  if (event.key === 'Enter') { event.preventDefault(); commitChoice(wrap); }
-  else if (event.key === 'Escape') { event.preventDefault(); closeChoicePanel(wrap); }
+  if (event.key === 'Enter') { event.preventDefault(); commitChoice(wrap, true); }
+  else if (event.key === 'Escape') { event.preventDefault(); closeChoicePanel(wrap, true); }
 });
 
 // 侧边栏切换
