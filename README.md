@@ -33,19 +33,32 @@
 
 ```
 .                              ← 部署根目录
-├── index.html                 首页（当前展厅）
-├── history-archive.html       历史展厅
-├── admin.html                 内容后台（在线可视化编辑）
-├── assets/gyp/favicon.png     站点图标（仓库里唯一的图片，见 §3）
-└── functions/
-    └── api/
-        └── content.js         边缘函数：GET 读内容 / POST 写内容
+├── index.html                 当前展厅（单文件，内联样式）
+├── history-archive.html       历史展厅（单文件，内联样式）
+├── admin.html                 内容后台 · 仅结构，236 行
+├── assets/
+│   ├── admin.css              后台样式（513 行）
+│   ├── admin.js               后台逻辑（741 行）
+│   └── favicon.png            站点图标，仓库里唯一的图片（见 §3）
+├── functions/
+│   └── api/
+│       └── content.js         边缘函数：GET 读内容 / POST 写内容
+├── docs/
+│   └── frontend-styleguide.md 前端样式契约：设计令牌、组件规范、数据契约
+├── .gitattributes             行尾统一 LF
+├── .gitignore
+└── README.md                  本文件
 ```
 
-仓库只装这 6 个文件。商品图已全部改用图床，所以原始素材（`素材/`，约 106 MB 含 mp4）和
-`assets/gyp/` 下 4 张已弃用的 PNG 都已从版本控制移出并写入 `.gitignore` ——
-文件仍在本地磁盘上，只是不再入库、不再部署。唯一例外是 `favicon.png`：
-它没有图床地址，必须随仓库部署，因此在 `.gitignore` 里单独放行。
+**两个展示页刻意保持单文件内联样式**——它们要能被单独丢到任何地方打开，少一个请求就少一个出错点。
+**后台页则拆成 HTML + 外部 CSS/JS**，因为它原本 1489 行，早已超出单文件的可维护上限。
+外部脚本用 `<script src="assets/admin.js" defer>`，是 classic script 而**不是 `type="module"`**：
+模块脚本在 `file://` 下会被 CORS 拦掉，那样双击打开就废了。
+
+商品图已全部改用图床，所以原始素材（`素材/`，约 106 MB 含 mp4）和 `assets/gyp/` 下 4 张
+已弃用的 PNG 都已从版本控制移出并写入 `.gitignore`——文件仍在本地磁盘上，只是不再入库、
+不再部署。注意这只影响最新快照：**历史提交里的二进制还在，`.git` 仍约 105 MB**，
+要真正瘦身需要重写历史 + 强制推送。
 
 工作区根目录下的 `gyp-merch-gallery.html`、`history-archive.html`、`admin.html`
 是**改造前的旧版**，仅作对照保留。确认新版无误后可以删除，避免两份并存产生分歧。

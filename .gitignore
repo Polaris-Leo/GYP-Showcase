@@ -1,11 +1,8 @@
 .claude/settings.local.json
 
-# 原始素材归档（含 mp4），仅本地保存，不参与部署也不入库
+# 原始素材归档（含 mp4，约 106 MB），仅本地保存，不入库也不部署
 素材/
 
-# 商品图已全部改用图床 i0.hdslb.com，本地副本不入库
-assets/*
-!assets/gyp/
-assets/gyp/*
-# 唯一例外：站点图标没有图床地址，必须随仓库一起部署
-!assets/gyp/favicon.png
+# 已弃用的本地商品图：展示图已全部改用图床 i0.hdslb.com
+# 站点图标不在这里，它在 assets/favicon.png，是仓库里唯一的图片
+assets/gyp/
