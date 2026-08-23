@@ -30,6 +30,24 @@
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=600, must-revalidate" }
       ]
+    },
+    {
+      "source": "/",
+      "headers": [
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    },
+    {
+      "source": "/history-archive.html",
+      "headers": [
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
     }
   ]
 }
