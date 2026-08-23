@@ -36,14 +36,16 @@
 ├── index.html                 首页（当前展厅）
 ├── history-archive.html       历史展厅
 ├── admin.html                 内容后台（在线可视化编辑）
-├── assets/gyp/favicon.png     站点图标（唯一保留的本地图片，见 §3）
-├── functions/
-│   └── api/
-│       └── content.js         边缘函数：GET 读内容 / POST 写内容
-└── 素材/                      原始素材归档，不参与部署
+├── assets/gyp/favicon.png     站点图标（仓库里唯一的图片，见 §3）
+└── functions/
+    └── api/
+        └── content.js         边缘函数：GET 读内容 / POST 写内容
 ```
 
-`assets/gyp/` 下另外 4 张 PNG 已改用图床，页面不再引用，仅作本地备份保留。
+仓库只装这 6 个文件。商品图已全部改用图床，所以原始素材（`素材/`，约 106 MB 含 mp4）和
+`assets/gyp/` 下 4 张已弃用的 PNG 都已从版本控制移出并写入 `.gitignore` ——
+文件仍在本地磁盘上，只是不再入库、不再部署。唯一例外是 `favicon.png`：
+它没有图床地址，必须随仓库部署，因此在 `.gitignore` 里单独放行。
 
 工作区根目录下的 `gyp-merch-gallery.html`、`history-archive.html`、`admin.html`
 是**改造前的旧版**，仅作对照保留。确认新版无误后可以删除，避免两份并存产生分歧。
