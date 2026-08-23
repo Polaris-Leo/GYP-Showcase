@@ -149,7 +149,7 @@ footer         →  padding: 16px var(--page-x) 24px;  同样 1fr auto 1fr
 |---|---|
 | `.brand` | mono 14px，`letter-spacing: .08em`，两行「鸽一品 / GEYIPIN」 |
 | `.header-nav a` | 默认透明下边框，hover/focus 变 `var(--fg)`——用**下划线**表示可点，不改文字颜色 |
-| `.hero` | 双列 `minmax(0,1.05fr) minmax(360px,.95fr)`，左文右图，`border-bottom` 收口 |
+| `.hero` | 双列 `minmax(0,1.13fr) minmax(280px,.87fr)`，左文右图，`border-bottom` 收口 |
 | `.hero-image-wrap` | `aspect-ratio: 1240 / 1867`（素材原始比例），`width: min(78%, 480px)`，居中；`::after` 伪元素做左下角图注 |
 | `.subnav` | mono 10px 两端对齐的一行元信息条 |
 | `.filters` | 一排 ghost 按钮，选中态只是 `border-color: var(--fg)`，不填色 |
@@ -372,14 +372,23 @@ Linked code folder：`C:\Users\17855\Desktop\Code\GYP\GYP-Showcase`（只读参�
 远端 `origin`：`github.com/Polaris-Leo/GYP-Showcase`。
 
 `site/` 的文件名现在与代码仓根目录**一一对应**，不再有改名映射。同步就是把 `site/` 的
-六个交付文件平移过去。但**仍然必须先 diff 再补差量，禁止整文件覆盖**，因为有一处故意的差异：
+六个交付文件平移过去。
 
-| 差异 | 说明 |
-|---|---|
-| 代码仓 `index.html` 的 Hero CSS | **代码仓自有并已提交（`61c6804`），永远不要用工作区版本覆盖。** 两边有 7 处不同：`.hero` 的 `min-height` / 列比例 / `gap`、`h1` 字号、`.hero-badge` 的 `z-index`、1100px 中屏断点、移动端 `padding-top`。代码仓那份是较新的定稿 |
+**2026-08-23：Hero CSS 的分歧已经解决。** 此前代码仓和工作区的 `.hero` 有 7 处不同，
+处理办法是**保留代码仓已提交的 4 个排版／比例值**（`min-height: min(720px, 76vh)`、
+列比例 `minmax(0,1.13fr) minmax(280px,.87fr)`、`gap: clamp(34px,6vw,112px)`、
+`h1: clamp(56px,9.2vw,148px)`），**只把工作区独有的 1100px 中屏断点补进代码仓**——纯增量，
+不回退任何已定稿的值。工作区随后对齐成与代码仓逐字节一致。另外两处工作区独有的写法被丢弃：
+`.hero-image-wrap::after` 的 `z-index: 5`（`::after` 在 DOM 顺序上本就晚于 `.hero-image`，
+无实际效果）和 `min-height` 里的 `svh` 单位（760px 以下 `.hero` 已是 `min-height: auto`，
+`svh` 要解决的地址栏伸缩在这里用不上）。
 
-同步 `index.html` 的正确做法：拿 `site/index.html`，用**锚定字符串替换**把上面 7 处改回代码仓的值，再写入；
-然后跑 `git diff 61c6804 HEAD -- index.html | grep -E '^[+-] '` 并确认结果里**没有任何样式行**。这是唯一可信的验收方式。
+所以现在**两边没有故意的差异了**，`site/index.html` 与代码仓 `index.html` 应当完全相同。
+同步前照例先 `diff` 一遍：如果出现差异，说明有一侧被单独改过，先弄清是谁改的、为什么，
+**不要直接整文件覆盖**。
+
+遗留未定：移动端 `.hero` 的 `padding-top` 取 `85px`（代码仓值，现为准）还是 `48px`。
+这个从代码上判断不了，得在真机上看顶部有没有被 `.site-header` 压住。
 
 ### 不入库的东西
 

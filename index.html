@@ -205,6 +205,12 @@
     .reveal { opacity: 0; transform: translateY(20px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
     .reveal.is-visible { opacity: 1; transform: translateY(0); }
 
+    @media (max-width: 1100px) and (min-width: 761px) {
+      .hero { min-height: 620px; grid-template-columns: minmax(0, 1fr) minmax(300px, .8fr); gap: 36px; }
+      h1 { font-size: clamp(66px, 8vw, 96px); }
+      .hero-image-wrap { width: min(92%, 400px); justify-self: center; margin-inline: auto; transform: none; }
+    }
+
     @media (max-width: 760px) {
       .site-header { grid-template-columns: 1fr auto; }
       .header-meta { display: none; }
