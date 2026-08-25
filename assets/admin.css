@@ -683,11 +683,11 @@ a { color: inherit; text-decoration: none; }
 .blob-filters .btn[aria-pressed="true"] { border-color: var(--fg); color: var(--fg); }
 /* 固定 4 列，配合 admin.js 里 BLOBS_PER_PAGE = 8 —— 一页正好两行。
    不再用 auto-fill：那是按可用宽度自己决定列数，宽屏上一行能塞六七张，每张只有
-   130 出头，认图全靠猜。每列封顶 260px：够宽就停在那儿，超宽屏不让 2:3 的竖图
-   长成一人高（多出来的宽度留在右边，不去撑格子）；窄了四列一起等比缩，仍是一行四张。 */
+   130 出头，认图全靠猜。四列改为均分可用宽度：保留一行四张的阅读节奏，同时填满
+   面板，不在右侧制造一大片像「缺内容」的空白；窄了四列一起等比缩，仍是一行四张。 */
 .blob-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 260px));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 .blob-empty {

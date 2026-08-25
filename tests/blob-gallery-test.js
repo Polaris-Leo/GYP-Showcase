@@ -757,6 +757,8 @@ function runSourceGroup() {
   // 缩略图排布：4 列 × 2 行 = 一页 8 张，比例照展厅卡片的原图
   ok('缩略图网格固定 4 列（不再由可用宽度自己决定列数）',
     /\.blob-grid\s*{[^}]*grid-template-columns:\s*repeat\(4,/.test(cssSrc));
+  ok('管理面板的四列均分可用宽度，不在右侧留下空白列',
+    /\.blob-grid\s*{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/.test(cssSrc));
   ok('缩略图按展厅原图比例 1242×1863 开框',
     /\.blob-thumb\s*{[^}]*aspect-ratio:\s*1242\s*\/\s*1863/.test(cssSrc),
     '素材原图是 1242×1863（正好 2:3），写 1/1 会把竖图上下各切掉四分之一');
