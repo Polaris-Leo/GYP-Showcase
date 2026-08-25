@@ -167,6 +167,13 @@ async function pushData() {
     try { const j = await res.json(); if (j && j.error) detail = j.error; } catch (_) {}
     throw new Error(detail);
   }
+  // 保存成功时服务端可能顺手回收了失去引用的图（见 functions/api/content.js 的
+  // sweepUnreferenced）。桶变了就让清单缓存作废，否则「数据」页和选择弹窗还会
+  // 列出已经不存在的键名，点开是破图。
+  try {
+    const body = await res.json();
+    if (body && body.gc) invalidateBlobCache();
+  } catch (_) { /* 响应体不是 JSON 也不影响保存本身已经成功 */ }
   apiState = 'ready';
 }
 
@@ -218,6 +225,10 @@ function hydrateForm(scope) {
     }
     input.value = value != null ? value : '';
     updatePreview(input);
+    // 图片字段的输入框是隐藏的，当前值靠控制行里那枚 .image-value 显示。
+    // 回填不走 input 事件，所以得在这里补一次同步，否则切页／导入后
+    // 字段值已经变了，旁边显示的还是上一张图的键名。
+    syncImageControl(input);
   });
 }
 
@@ -272,8 +283,8 @@ function updatePreview(input) {
 
 // ───────── 图片上传（Pages Blob） ─────────
 //
-// 上传是**附加**功能，不替代原来的手填链接：字段仍然是一个普通文本框，
-// 上传成功只是帮你把 /img?key=… 填进去。所以图床链接、B 站装扮链接照样能用，
+// 上传是**附加**功能，不替代原来的手填链接：字段的值仍然是一个普通字符串，
+// 上传成功只是帮你把 /img?key=… 填进去。所以任意外部图片直链照样能用，
 // 而且万一 Blob 那边出问题，手填这条路一点没受影响。
 
 // ⚠️ 必须与 functions/api/upload.js 里的 MAX_BYTES 一致。
@@ -339,20 +350,715 @@ async function uploadFile(file) {
   return signed.url;
 }
 
-/**
- * 给每个图片链接输入框挂一个上传控件。
+/* ── Blob 图片键名 ────────────────────────────────────────────────────
+ * ⚠️ 下面的正则与 functions/api/content.js 的 BLOB_KEY_RE **必须保持一致**，
+ * 改一处要改两处。两边的等价性由 RECON/blob-key-parity-test.js 把住。
  *
- * 从 JS 注入而不是写进 HTML：图片字段一共三处——admin.html 里的主图，
- * 加上周边物品与历史条目两个动态生成的字段。写死在模板里就要维护三份一样的标记，
- * 而这里只认 data-type="image-src"，以后再加图片字段会自动带上上传控件。
+ * 位置在这里而不是跟着导入弹窗放在文件末尾：三处用到它 —— 导入弹窗、选择图片
+ * 弹窗、数据页的清单面板 —— 而最早的调用发生在启动时的 bindFields(document)
+ * （经 attachImageControls → syncImageControl）。const 有 TDZ，声明留在文件末尾
+ * 会让首屏直接 ReferenceError。
  */
-function attachUploaders(scope) {
+const BLOB_KEY_RE = /img\/[0-9a-f]{32}\.(?:png|jpg|webp|gif)/g;
+
+function collectBlobKeys(root) {
+  const keys = new Set();
+  const scan = (text) => {
+    const found = text.match(BLOB_KEY_RE);
+    if (found) found.forEach((k) => keys.add(k));
+  };
+  const walk = (node, depth) => {
+    if (depth > 8) return;
+    if (typeof node === 'string') {
+      scan(node);
+      // 值可能是编码过的 /img?key=img%2F…
+      try {
+        const decoded = decodeURIComponent(node);
+        if (decoded !== node) scan(decoded);
+      } catch (_) { /* 半截百分号会抛，原串已扫过 */ }
+      return;
+    }
+    if (Array.isArray(node)) { node.forEach((v) => walk(v, depth + 1)); return; }
+    if (node && typeof node === 'object') { Object.values(node).forEach((v) => walk(v, depth + 1)); }
+  };
+  walk(root, 0);
+  return keys;
+}
+
+/* ── Blob 图片清单（/api/blobs） ──────────────────────────────────────
+ * 官方 store.list() 每个对象**只给 key 和 etag** —— 没有文件大小，也没有上传
+ * 时间。所以这里排不出「最新上传在前」，只能按键名排；键名是内容哈希，等于随机
+ * 顺序。UI 上不要暗示时间序，否则用户会按「最后一个是刚传的」去理解，然后删错。
+ *
+ * 列表带 30 秒缓存：选择弹窗可能被反复打开，每次都打一次网络请求没必要。
+ * 上传成功、删除成功都会主动作废缓存，所以缓存不会让人看到过期的清单。
+ */
+const BLOB_LIST_TTL = 30000;
+let blobCache = null;     // { at, blobs, total, truncated, skipped }
+let blobPending = null;   // 进行中的请求，用来并发去重
+
+async function fetchBlobList(force) {
+  if (!force && blobCache && Date.now() - blobCache.at < BLOB_LIST_TTL) return blobCache;
+  // 两处入口（数据面板、选择弹窗）可能几乎同时要列表，共用同一个 in-flight 请求
+  if (blobPending) return blobPending;
+  blobPending = (async () => {
+    const res = await fetch('/api/blobs', { credentials: 'same-origin' });
+    if (!res.ok) throw new Error(await errText(res));
+    const body = await res.json();
+    const blobs = (body.blobs || []).slice().sort((a, b) => a.key.localeCompare(b.key));
+    blobCache = {
+      at: Date.now(),
+      blobs,
+      total: typeof body.total === 'number' ? body.total : blobs.length,
+      truncated: !!body.truncated,
+      skipped: body.skipped || 0,
+    };
+    return blobCache;
+  })();
+  try {
+    return await blobPending;
+  } finally {
+    blobPending = null;
+  }
+}
+
+function invalidateBlobCache() { blobCache = null; }
+
+async function deleteBlob(key) {
+  const res = await fetch('/api/blobs?key=' + encodeURIComponent(key), {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  });
+  if (!res.ok) throw new Error(await errText(res));
+  // 本地即时摘掉，避免删完还要等一次完整刷新才消失
+  if (blobCache) blobCache.blobs = blobCache.blobs.filter((b) => b.key !== key);
+  return res.json();
+}
+
+/** 当前内容里正在引用的 Blob 键名。复用导入弹窗那套收集器，口径与服务端一致。 */
+function usedBlobKeys() { return collectBlobKeys(data); }
+
+/** 从字段值里认出 Blob 键名（值可能是 /img?key=img%2F… 这种编码形态） */
+function blobKeyOf(value) {
+  if (!value) return '';
+  const found = collectBlobKeys(String(value));
+  const first = found.values().next();
+  return first.done ? '' : first.value;
+}
+
+// img/1a2b…9f0e.png → 1a2b…9f0e.png：键名前 8 位足够肉眼区分，全名放 title 里
+function shortBlobKey(key) {
+  const bare = key.replace(/^img\//, '');
+  const dot = bare.lastIndexOf('.');
+  const hash = dot < 0 ? bare : bare.slice(0, dot);
+  const ext = dot < 0 ? '' : bare.slice(dot);
+  return hash.length > 12 ? hash.slice(0, 8) + '…' + ext : bare;
+}
+
+function blobThumb(blob) {
+  const thumb = document.createElement('div');
+  thumb.className = 'blob-thumb';
+  const img = document.createElement('img');
+  // 装饰性：紧挨着的键名就是它的可读标识，再念一遍图片是噪音
+  img.alt = '';
+  img.loading = 'lazy';
+  img.addEventListener('error', () => {
+    if (!img.isConnected) return;
+    thumb.textContent = '';
+    const span = document.createElement('span');
+    span.textContent = '读取失败';
+    thumb.appendChild(span);
+  });
+  img.src = blob.url;
+  thumb.appendChild(img);
+  return thumb;
+}
+
+function blobBadge(inUse) {
+  const badge = document.createElement('span');
+  badge.className = 'blob-badge';
+  badge.dataset.use = inUse ? 'yes' : 'no';
+  badge.textContent = inUse ? '● 使用中' : '○ 未使用';
+  return badge;
+}
+
+const BLOB_FILTERS = {
+  all: () => true,
+  used: (inUse) => inUse,
+  free: (inUse) => !inUse,
+};
+
+/* 一页 8 张 —— 对应 admin.css 里 .blob-grid 的 4 列，正好两行。
+   面板用这套页大小；选择图片弹窗单独限制为 4 张，避免弹窗内容过长。
+   （和条目列表的 ITEMS_PER_PAGE = 4、展示页的 PAGE_SIZE 都没有关系，别混。） */
+const BLOBS_PER_PAGE = 8;
+const PICKER_BLOBS_PER_PAGE = 4;
+const blobPageCount = (total, pageSize) => Math.max(1, Math.ceil(total / (pageSize || BLOBS_PER_PAGE)));
+
+/**
+ * 图片网格的分页条。
+ * 皮肤直接借条目列表那套 .list-pager（虚线框 + surface 底、当前页只加深边框），
+ * 但页码按钮挂的是 data-blob-page 并各自绑回调：.admin-content 上那个委托监听
+ * 只认 data-list-page，两套分页不会互相接错事件。
+ * 补零就近写一个，不去用文件后面「条目集合」那节才声明的 pad2 —— Blob 这一节
+ * 不该反过来依赖排在它后面的东西。
+ */
+function buildBlobPager(page, pages, total, onPage, pageSize) {
+  const pad = (n) => String(n).padStart(2, '0');
+  const size = pageSize || BLOBS_PER_PAGE;
+  const from = (page - 1) * size + 1;
+  const to = Math.min(page * size, total);
+
+  const bar = document.createElement('div');
+  bar.className = 'list-pager blob-pager';
+
+  const status = document.createElement('p');
+  status.className = 'list-pager-status';
+  status.setAttribute('aria-live', 'polite');
+  // 说「本页第几到第几」而不是只说页码：上面工具条里那句「共 N 张」讲的是整桶，
+  // 这里讲的是当前筛选下的这一页，两句话不能都写成「共 N 张」。
+  status.textContent = '第 ' + pad(page) + ' / ' + pad(pages) + ' 页 · 本页 '
+    + pad(from) + '–' + pad(to) + '（筛选后共 ' + pad(total) + ' 张）';
+
+  const controls = document.createElement('div');
+  controls.className = 'list-pager-controls';
+
+  let gapped = false;
+  const button = (label, value, opts) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-sm';
+    b.dataset.blobPage = String(value);
+    b.textContent = label;
+    if (opts && opts.disabled) b.disabled = true;
+    if (opts && opts.current) b.setAttribute('aria-current', 'page');
+    if (opts && opts.aria) b.setAttribute('aria-label', opts.aria);
+    b.addEventListener('click', () => { if (!b.disabled) onPage(value); });
+    return b;
+  };
+
+  controls.appendChild(button('← 上一页', page - 1, { disabled: page === 1 }));
+  // 页数多时收成 01 … 04 05 06 … 12，免得页码把整行挤到换行
+  for (let p = 1; p <= pages; p++) {
+    if (pages <= 7 || p === 1 || p === pages || Math.abs(p - page) <= 1) {
+      controls.appendChild(button(pad(p), p, { current: p === page, aria: '第 ' + p + ' 页' }));
+      gapped = false;
+    } else if (!gapped) {
+      const gap = document.createElement('span');
+      gap.className = 'list-pager-gap';
+      gap.setAttribute('aria-hidden', 'true');
+      gap.textContent = '…';
+      controls.appendChild(gap);
+      gapped = true;
+    }
+  }
+  controls.appendChild(button('下一页 →', page + 1, { disabled: page === pages }));
+
+  bar.append(status, controls);
+  return bar;
+}
+
+/**
+ * 画一格图片网格。两个调用点共用：
+ *   mode 'pick'   → 整格是一个按钮，点了就选中（弹窗里）
+ *   mode 'manage' → 整格是 div，底部带「复制链接 / 删除」（数据面板里）
+ * 不做成一个模式：pick 模式整格可点，manage 模式格子里有按钮，
+ * 按钮套按钮是非法结构，读屏和键盘都会出问题。
+ *
+ * cfg.page / cfg.onPage 是分页：只画当前页的 pageSize 张（默认 BLOBS_PER_PAGE），多于一页时在
+ * 网格末尾插一条分页条。不传 onPage 就不分页控件（也就画不动第二页）。
+ * 返回值始终是**筛选后的总数**，不是这一页的张数 —— 工具条里那句「当前筛选
+ * 显示 N」要的是前者，调用方也拿它来把自己存的页码收回合法范围。
+ */
+function paintBlobGrid(host, cfg) {
+  const used = usedBlobKeys();
+  const pass = BLOB_FILTERS[cfg.filter] || BLOB_FILTERS.all;
+  const shown = cfg.blobs.filter((b) => pass(used.has(b.key)));
+
+  host.textContent = '';
+  if (!shown.length) {
+    const empty = document.createElement('p');
+    empty.className = 'blob-empty';
+    empty.textContent = cfg.blobs.length
+      ? '没有符合当前筛选的图片。'
+      : '桶里还没有图片。用字段里的「上传图片」传一张试试。';
+    host.appendChild(empty);
+    return shown.length;
+  }
+
+  /* 页码就地夹回合法范围：删图、切筛选、导入一份更短的备份，都可能让存着的
+     页码越界（和 renderItemList 同一个道理）。这里只用夹过的值，不回写调用方的
+     state —— 那份收尾由调用方拿返回值自己做，免得画着画着又触发一次重画。 */
+  const pageSize = cfg.pageSize || BLOBS_PER_PAGE;
+  const pages = blobPageCount(shown.length, pageSize);
+  const page = Math.min(Math.max(cfg.page || 1, 1), pages);
+  const from = (page - 1) * pageSize;
+
+  shown.slice(from, from + pageSize).forEach((blob) => {
+    const inUse = used.has(blob.key);
+    const tile = document.createElement(cfg.mode === 'pick' ? 'button' : 'div');
+    tile.className = 'blob-tile';
+    tile.dataset.blobKey = blob.key;
+
+    const meta = document.createElement('div');
+    meta.className = 'blob-meta';
+    const keyEl = document.createElement('span');
+    keyEl.className = 'blob-key';
+    keyEl.textContent = shortBlobKey(blob.key);
+    keyEl.title = blob.key;
+    meta.append(keyEl, blobBadge(inUse));
+
+    if (cfg.mode === 'pick') {
+      tile.type = 'button';
+      tile.setAttribute('aria-label', '选择 ' + blob.key + (inUse ? '（使用中）' : '（未使用）'));
+      if (cfg.currentKey && cfg.currentKey === blob.key) {
+        tile.dataset.current = 'true';
+        // aria-label 已经念了键名，这里补一句「当前」
+        tile.setAttribute('aria-label', '当前已选：' + blob.key);
+        const now = document.createElement('span');
+        now.className = 'blob-current';
+        now.textContent = '当前';
+        meta.appendChild(now);
+      }
+      tile.append(blobThumb(blob), meta);
+      tile.addEventListener('click', () => cfg.onPick(blob));
+    } else {
+      const actions = document.createElement('div');
+      actions.className = 'blob-actions';
+
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'btn btn-sm';
+      copy.textContent = '复制链接';
+      copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(blob.url);
+          showSaveStatus('已复制 ' + blob.url);
+        } catch (e) {
+          showSaveStatus('复制失败');
+        }
+      });
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn btn-sm btn-danger';
+      del.textContent = '删除';
+      if (inUse) {
+        // 使用中的图不给删。删了展示页就是一个破图，而且这里删不掉引用——
+        // 正确路径是先在字段里换掉，保存时 /api/content 会自动回收它。
+        del.disabled = true;
+        del.title = '这张图还被内容引用着。请先在对应字段换掉它，保存后会自动回收。';
+      } else {
+        del.addEventListener('click', async () => {
+          if (!confirm(
+            '确定删除这张图吗？\n\n' + blob.key + '\n\n' +
+            '它当前没有被任何内容引用。删除后需要重新上传原文件才能恢复，此操作不可撤销。'
+          )) return;
+          del.disabled = true;
+          try {
+            await deleteBlob(blob.key);
+            showSaveStatus('已删除 ' + shortBlobKey(blob.key));
+            renderBlobPanel();
+          } catch (e) {
+            del.disabled = false;
+            showSaveStatus((e && e.message) || '删除失败');
+          }
+        });
+      }
+
+      actions.append(copy, del);
+      tile.append(blobThumb(blob), meta, actions);
+    }
+
+    host.appendChild(tile);
+  });
+
+  // 只有一页就不插分页条：装得下的时候那一行纯属噪音
+  if (pages > 1 && cfg.onPage) {
+    host.appendChild(buildBlobPager(page, pages, shown.length, cfg.onPage, pageSize));
+  }
+
+  return shown.length;
+}
+
+/* ── 数据页的「Blob 图片」面板 ─────────────────────────────────────── */
+
+const blobPanelState = { filter: 'all', page: 1 };
+
+async function renderBlobPanel(force) {
+  const host = document.getElementById('blob-gallery');
+  const countEl = document.getElementById('blob-count');
+  if (!host) return;
+
+  if (!blobCache || force) {
+    host.textContent = '';
+    const loading = document.createElement('p');
+    loading.className = 'blob-empty';
+    loading.textContent = '正在读取清单…';
+    host.appendChild(loading);
+  }
+
+  let list;
+  try {
+    list = await fetchBlobList(force);
+  } catch (e) {
+    host.textContent = '';
+    const bad = document.createElement('p');
+    bad.className = 'blob-empty';
+    bad.dataset.kind = 'bad';
+    bad.textContent = (e && e.message) || '读取失败';
+    host.appendChild(bad);
+    if (countEl) countEl.textContent = '读取失败';
+    return;
+  }
+
+  const shownCount = paintBlobGrid(host, {
+    mode: 'manage',
+    blobs: list.blobs,
+    filter: blobPanelState.filter,
+    page: blobPanelState.page,
+    onPage: (p) => { blobPanelState.page = p; renderBlobPanel(); },
+  });
+  // 网格刚可能把页码夹回来过（删掉最后一页那张、或切了筛选），把状态收到同一个值上
+  blobPanelState.page = Math.min(blobPanelState.page, blobPageCount(shownCount));
+
+  if (countEl) {
+    const used = usedBlobKeys();
+    const inUse = list.blobs.filter((b) => used.has(b.key)).length;
+    const parts = [
+      '共 ' + list.total + ' 张',
+      '使用中 ' + inUse,
+      '未使用 ' + (list.blobs.length - inUse),
+    ];
+    if (blobPanelState.filter !== 'all') parts.push('当前筛选显示 ' + shownCount);
+    if (list.truncated) parts.push('⚠ 超过 ' + list.blobs.length + ' 张的部分未列出');
+    if (list.skipped) parts.push('另有 ' + list.skipped + ' 个非上传接口生成的对象未显示');
+    countEl.textContent = parts.join(' · ');
+  }
+}
+
+const blobRefreshBtn = document.getElementById('blob-refresh');
+if (blobRefreshBtn) {
+  blobRefreshBtn.addEventListener('click', () => {
+    invalidateBlobCache();
+    renderBlobPanel(true);
+  });
+}
+
+/* 数据页直接往桶里传图，不改任何内容字段；上传成功后它会是「未使用」，
+   所以无论当前筛选在哪一组都切回「全部」并回到第一页，确保新图立刻可见。 */
+const blobUploadPicker = document.getElementById('blob-upload-file');
+const blobUploadBtn = document.getElementById('blob-upload');
+const blobUploadStatus = document.getElementById('blob-upload-status');
+const setBlobUploadStatus = (text, kind) => {
+  if (!blobUploadStatus) return;
+  blobUploadStatus.textContent = text;
+  blobUploadStatus.dataset.kind = kind || '';
+};
+if (blobUploadPicker && blobUploadBtn) {
+  blobUploadBtn.addEventListener('click', () => blobUploadPicker.click());
+  blobUploadPicker.addEventListener('change', async () => {
+    const file = blobUploadPicker.files && blobUploadPicker.files[0];
+    // 重置 value，否则连续上传同一个文件时第二次不会触发 change。
+    blobUploadPicker.value = '';
+    if (!file) return;
+
+    if (!UPLOAD_TYPES.includes(file.type)) {
+      setBlobUploadStatus(
+        file.type === 'image/svg+xml'
+          ? '不收 SVG（可内嵌脚本），请先转成 PNG'
+          : '不支持的格式：' + (file.type || '未知'),
+        'bad'
+      );
+      return;
+    }
+
+    blobUploadBtn.disabled = true;
+    setBlobUploadStatus('上传中…（' + fmtSize(file.size) + '）');
+    try {
+      await uploadFile(file);
+      invalidateBlobCache();
+      blobPanelState.filter = 'all';
+      blobPanelState.page = 1;
+      document.querySelectorAll('[data-blob-filter]').forEach((btn) => {
+        btn.setAttribute('aria-pressed', String(btn.dataset.blobFilter === 'all'));
+      });
+      setBlobUploadStatus('已上传 · ' + fmtSize(file.size), 'ok');
+      renderBlobPanel(true);
+    } catch (e) {
+      setBlobUploadStatus((e && e.message) || '上传失败', 'bad');
+    } finally {
+      blobUploadBtn.disabled = false;
+    }
+  });
+}
+document.querySelectorAll('[data-blob-filter]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    blobPanelState.filter = btn.dataset.blobFilter;
+    // 换了筛选就回第一页：留在第 3 页而新结果只有 5 张，看着就是「筛完啥都没了」
+    blobPanelState.page = 1;
+    document.querySelectorAll('[data-blob-filter]').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b === btn));
+    });
+    renderBlobPanel();
+  });
+});
+
+/* ── 选择图片弹窗 ─────────────────────────────────────────────────────
+ * 一个单例，第一次打开时才建。字段那边不持有任何弹窗结构，所以动态生成的
+ * 条目字段（周边／历史）和 admin.html 里的静态字段共用同一个弹窗。
+ *
+ * 弹窗里保留「外部链接」输入框，这不是可选的：站点的默认图全部是外部直链
+ * （见 README §3），如果只能从 Blob 里选，默认图就再也填不回去了。
+ */
+let pickerEl = null;
+let pickerState = { target: null, trigger: null, filter: 'all', page: 1 };
+
+function buildPicker() {
+  const back = document.createElement('div');
+  back.className = 'picker-backdrop';
+  back.hidden = true;
+
+  const panel = document.createElement('div');
+  panel.className = 'picker';
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  panel.setAttribute('aria-labelledby', 'picker-title');
+
+  panel.innerHTML =
+    '<div class="picker-head">' +
+      '<h3 id="picker-title">选择图片</h3>' +
+      '<span class="picker-target" data-picker-target></span>' +
+      '<button class="btn btn-icon picker-close" type="button" data-picker-close aria-label="关闭">×</button>' +
+    '</div>' +
+    '<div class="picker-toolbar">' +
+      '<p class="blob-count" data-picker-count role="status" aria-live="polite"></p>' +
+      '<div class="blob-filters" role="group" aria-label="按使用状态筛选">' +
+        '<button class="btn btn-sm" type="button" data-picker-filter="all" aria-pressed="true">全部</button>' +
+        '<button class="btn btn-sm" type="button" data-picker-filter="used" aria-pressed="false">使用中</button>' +
+        '<button class="btn btn-sm" type="button" data-picker-filter="free" aria-pressed="false">未使用</button>' +
+      '</div>' +
+      '<button class="btn btn-sm" type="button" data-picker-refresh>刷新</button>' +
+    '</div>' +
+    '<div class="picker-body"><div class="blob-grid" data-picker-grid></div></div>' +
+    '<div class="picker-foot">' +
+      '<label class="picker-url-label" for="picker-url">或填外部链接</label>' +
+      '<div class="picker-url-row">' +
+        '<input type="text" id="picker-url" data-picker-url spellcheck="false" placeholder="https://example.com/image.png">' +
+        '<button class="btn btn-primary btn-sm" type="button" data-picker-apply>使用这个链接</button>' +
+        '<button class="btn btn-sm" type="button" data-picker-clear>清空该字段</button>' +
+      '</div>' +
+    '</div>';
+
+  back.appendChild(panel);
+  document.body.appendChild(back);
+
+  // 点遮罩关闭；点面板内部不关（事件冒到遮罩上时 target 已经不是遮罩本身）
+  back.addEventListener('click', (event) => { if (event.target === back) closePicker(); });
+  panel.querySelector('[data-picker-close]').addEventListener('click', closePicker);
+  panel.querySelector('[data-picker-refresh]').addEventListener('click', () => {
+    invalidateBlobCache();
+    renderPicker(true);
+  });
+  panel.querySelectorAll('[data-picker-filter]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      pickerState.filter = btn.dataset.pickerFilter;
+      pickerState.page = 1;
+      panel.querySelectorAll('[data-picker-filter]').forEach((b) => {
+        b.setAttribute('aria-pressed', String(b === btn));
+      });
+      renderPicker();
+    });
+  });
+  panel.querySelector('[data-picker-apply]').addEventListener('click', () => {
+    const url = panel.querySelector('[data-picker-url]').value.trim();
+    if (!url) { showSaveStatus('请先填链接'); return; }
+    applyPickedValue(url);
+  });
+  panel.querySelector('[data-picker-clear]').addEventListener('click', () => applyPickedValue(''));
+  panel.querySelector('[data-picker-url]').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      panel.querySelector('[data-picker-apply]').click();
+    }
+  });
+
+  return back;
+}
+
+function pickerFocusables() {
+  return Array.from(
+    pickerEl.querySelectorAll('button:not([disabled]), input:not([disabled])')
+  ).filter((el) => el.offsetParent !== null);
+}
+
+function onPickerKeydown(event) {
+  if (event.key === 'Escape') { event.preventDefault(); closePicker(); return; }
+  if (event.key !== 'Tab') return;
+  // 焦点圈在弹窗里：aria-modal 只告诉读屏软件「外面别念」，
+  // 并不会阻止 Tab 走到背后的页面上去，那一步得自己做。
+  const items = pickerFocusables();
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+async function renderPicker(force) {
+  const grid = pickerEl.querySelector('[data-picker-grid]');
+  const countEl = pickerEl.querySelector('[data-picker-count]');
+  const currentKey = blobKeyOf(pickerState.target ? pickerState.target.value : '');
+
+  if (!blobCache || force) {
+    grid.textContent = '';
+    const loading = document.createElement('p');
+    loading.className = 'blob-empty';
+    loading.textContent = '正在读取清单…';
+    grid.appendChild(loading);
+    countEl.textContent = '';
+  }
+
+  let list;
+  try {
+    list = await fetchBlobList(force);
+  } catch (e) {
+    grid.textContent = '';
+    const bad = document.createElement('p');
+    bad.className = 'blob-empty';
+    bad.dataset.kind = 'bad';
+    bad.textContent = (e && e.message) || '读取失败';
+    grid.appendChild(bad);
+    countEl.textContent = '读取失败';
+    return;
+  }
+  // 读列表期间弹窗可能已经被关掉了，别再往里画
+  if (pickerEl.hidden) return;
+
+  const shownCount = paintBlobGrid(grid, {
+    mode: 'pick',
+    blobs: list.blobs,
+    filter: pickerState.filter,
+    currentKey,
+    page: pickerState.page,
+    pageSize: PICKER_BLOBS_PER_PAGE,
+    onPage: (p) => { pickerState.page = p; renderPicker(); },
+    onPick: (blob) => applyPickedValue(blob.url),
+  });
+  pickerState.page = Math.min(pickerState.page, blobPageCount(shownCount, PICKER_BLOBS_PER_PAGE));
+
+  const parts = ['共 ' + list.total + ' 张'];
+  if (pickerState.filter !== 'all') parts.push('显示 ' + shownCount);
+  if (list.truncated) parts.push('⚠ 部分未列出');
+  countEl.textContent = parts.join(' · ');
+}
+
+function openPicker(input, trigger) {
+  if (!pickerEl) pickerEl = buildPicker();
+  pickerState.target = input;
+  pickerState.trigger = trigger;
+  // 每次打开都从第一页起：上次翻到第 3 页跟这次要选哪张图没有关系
+  pickerState.page = 1;
+
+  const label = input.closest('.field-card');
+  const labelText = label && label.querySelector('.field-label')
+    ? label.querySelector('.field-label').textContent.trim()
+    : input.dataset.field;
+  pickerEl.querySelector('[data-picker-target]').textContent = labelText;
+
+  const urlInput = pickerEl.querySelector('[data-picker-url]');
+  // 当前值是 Blob 图时不预填：那不是「外部链接」，预填会让人以为要手改这串
+  urlInput.value = blobKeyOf(input.value) ? '' : input.value;
+
+  pickerEl.hidden = false;
+  document.addEventListener('keydown', onPickerKeydown, true);
+  renderPicker();
+  const first = pickerFocusables()[0];
+  if (first) first.focus();
+}
+
+function closePicker() {
+  if (!pickerEl || pickerEl.hidden) return;
+  pickerEl.hidden = true;
+  document.removeEventListener('keydown', onPickerKeydown, true);
+  const back = pickerState.trigger;
+  pickerState.target = null;
+  pickerState.trigger = null;
+  // 焦点还回触发按钮，不然关掉弹窗后焦点掉到 body，键盘用户要从头 Tab
+  if (back && back.isConnected) back.focus();
+}
+
+function applyPickedValue(value) {
+  const input = pickerState.target;
+  // 弹窗开着的时候字段可能已经被重渲染掉了（比如另一处保存触发了列表重画）。
+  // 往一个脱离文档的 input 上写值会静默丢失，所以先确认它还在。
+  if (!input || !input.isConnected) {
+    showSaveStatus('该字段已刷新，请重新打开选择');
+    closePicker();
+    return;
+  }
+  input.value = value;
+  // 派发 input 事件，交给 bindFields 里已有的绑定做 updateValue / markChanged /
+  // updatePreview / syncBlockTitle —— 和上传成功那条路完全一样，不重复实现。
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  syncImageControl(input);
+  closePicker();
+  showSaveStatus(value ? '已选择图片' : '已清空该字段');
+}
+
+/* ── 图片字段的控制行 ─────────────────────────────────────────────────
+ * 字段本体仍然是那个 input，只是**不再显示**：它继续承载值，
+ * hydrateForm / updateValue / updatePreview / 导出 全都不用改一行。
+ * 显示层换成「选择图片 + 上传图片 + 当前值」。
+ *
+ * 从 JS 注入而不是写进 HTML：图片字段一共三处 —— admin.html 里的主图，
+ * 加上周边物品与历史条目两个动态生成的字段。写死在模板里就要维护三份一样的标记，
+ * 而这里只认 data-type="image-src"，以后再加图片字段会自动带上整套控件。
+ */
+function syncImageControl(input) {
+  const row = input.nextElementSibling;
+  if (!row || !row.classList.contains('image-control')) return;
+  const valueEl = row.querySelector('.image-value');
+  if (!valueEl) return;
+  const raw = input.value.trim();
+  const key = blobKeyOf(raw);
+  if (!raw) {
+    valueEl.textContent = '未选择图片';
+    valueEl.dataset.kind = 'none';
+    valueEl.removeAttribute('title');
+  } else if (key) {
+    valueEl.textContent = 'Blob · ' + shortBlobKey(key);
+    valueEl.dataset.kind = 'blob';
+    valueEl.title = raw;
+  } else {
+    valueEl.textContent = '外部链接 · ' + raw.replace(/^https?:\/\//, '').slice(0, 42);
+    valueEl.dataset.kind = 'url';
+    valueEl.title = raw;
+  }
+}
+
+function attachImageControls(scope) {
   (scope || document).querySelectorAll('input[data-type="image-src"]').forEach((input) => {
     if (input.dataset.uploader === '1') return;
     input.dataset.uploader = '1';
 
+    // 输入框退居幕后：display:none 会把它一并移出无障碍树和 Tab 序列，
+    // 正是想要的效果 —— 键盘用户不该 Tab 到一个看不见的文本框上。
+    // 手填链接的能力没有丢，挪进了弹窗里的「外部链接」。
+    input.classList.add('is-behind-picker');
+
     const row = document.createElement('div');
-    row.className = 'upload-row';
+    row.className = 'image-control';
+
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'btn btn-sm';
+    pick.textContent = '选择图片';
 
     const picker = document.createElement('input');
     picker.type = 'file';
@@ -366,21 +1072,26 @@ function attachUploaders(scope) {
     btn.className = 'btn btn-sm upload-btn';
     btn.textContent = '上传图片';
 
+    const valueEl = document.createElement('span');
+    valueEl.className = 'image-value';
+
     const status = document.createElement('span');
     status.className = 'upload-status';
     // 上传结果要让读屏软件也念出来，否则失败提示只有看得见的人知道
     status.setAttribute('role', 'status');
     status.setAttribute('aria-live', 'polite');
 
-    row.append(picker, btn, status);
+    row.append(pick, picker, btn, valueEl, status);
     // 插在输入框后面，属于同一张 field-card
     input.insertAdjacentElement('afterend', row);
+    syncImageControl(input);
 
     const setStatus = (text, kind) => {
       status.textContent = text;
       status.dataset.kind = kind || '';
     };
 
+    pick.addEventListener('click', () => openPicker(input, pick));
     btn.addEventListener('click', () => picker.click());
 
     picker.addEventListener('change', async () => {
@@ -407,6 +1118,9 @@ function attachUploaders(scope) {
         // 派发 input 事件，交给已有的绑定去做 updateValue / markChanged / updatePreview，
         // 不在这里重复一遍那三件事——重复就会有一天忘记同步。
         input.dispatchEvent(new Event('input', { bubbles: true }));
+        syncImageControl(input);
+        // 桶里多了一张，清单缓存作废，否则刚传的图在选择弹窗里看不到
+        invalidateBlobCache();
         setStatus('已上传 · ' + fmtSize(file.size), 'ok');
       } catch (e) {
         setStatus((e && e.message) || '上传失败', 'bad');
@@ -444,7 +1158,7 @@ function bindFields(scope) {
   });
   // 挂在 bindFields 末尾，是为了让两个调用点（启动时的 document、
   // renderItemList 里的 host）自动都覆盖到，不用记得两处各调一次
-  attachUploaders(scope);
+  attachImageControls(scope);
 }
 bindFields(document);
 
@@ -474,7 +1188,7 @@ const collections = {
         options: [['gift', '舰长礼物'], ['sale', '收藏企划']] },
       { key: 'note', label: '卡片简介', kind: 'textarea', grow: true },
       { key: 'image', label: '图片链接', kind: 'text', preview: true,
-        hint: '填图床完整链接。B 站装扮素材的链接＝<code>https://i0.hdslb.com/bfs/garb/open/</code> ＋ 图片文件名。' }
+        hint: '点「选择图片」从已上传的图片里挑，弹窗底部也能填任意外部图片直链；「上传图片」直接传新文件。' }
     ],
     blank: (n) => ({
       title: '新物品 ' + pad2(n),
@@ -498,7 +1212,7 @@ const collections = {
         hint: '选项就是其它条目正在用的类别；下拉的最后一项「＋ 新增类别」可以现场加一个，加完会立刻用在本条目上，并出现在其它条目的下拉里。<strong>没有任何条目在用的类别会自动从下拉里消失。</strong>同时用于列表的「类别：…」与表格视图的标签。' },
       { key: 'desc', label: '简介', kind: 'textarea', grow: true },
       { key: 'image', label: '图片链接', kind: 'text', preview: true,
-        hint: '填图床完整链接。B 站装扮素材的链接＝<code>https://i0.hdslb.com/bfs/garb/open/</code> ＋ 图片文件名。' }
+        hint: '点「选择图片」从已上传的图片里挑，弹窗底部也能填任意外部图片直链；「上传图片」直接传新文件。' }
     ],
     blank: (n) => ({
       title: '新条目 ' + pad2(n),
@@ -969,6 +1683,8 @@ function buildItemBlock(name, id, index, total) {
   block.className = 'item-block';
   block.dataset.itemBlock = name;
   block.dataset.itemId = id;
+  // 记下全局序号：分页后 syncBlockTitle 不能再靠 DOM 位置反推序号了
+  block.dataset.itemIndex = String(index);
 
   const head = document.createElement('div');
   head.className = 'item-block-head';
@@ -1043,21 +1759,107 @@ function buildItemBlock(name, id, index, total) {
   return block;
 }
 
-function renderItemList(name) {
+/* ── 后台列表分页 ──────────────────────────────────────────────────────
+ * 每页最多 4 项；不足 5 项时整条分页不出现（默认的 4 件物品看不出任何变化）。
+ *
+ * 与展示页分页的关键区别：这里的操作会**改变条目所在的页**，所以三处必须跟着走。
+ *   · 新增 → 条目追加在末尾，必定落在最后一页。不跳页的话点了「添加」屏幕上
+ *     什么都不会发生，后面的 scrollIntoView 和 focus 也会因为 DOM 里根本没有
+ *     这个块而静默失效 —— 看起来就是「按钮坏了」。
+ *   · 上移／下移 → 跨页边界时（第 5 项上移成第 4 项）条目会从当前页消失，
+ *     必须跟到它的新页，否则像「按了一下，东西没了」。
+ *   · 删除／导入更短的备份 → 当前页码可能越界，要收回来。
+ *
+ * 另外 buildItemBlock 收到的 index / total 一律是**全局**的，不是页内的：
+ * 01/02 的编号、以及首尾条目禁用上移/下移，都得按整个列表算。按页算会让
+ * 第二页的第一项显示成 01，还会错误地把它的「上移」按钮变灰。
+ */
+const ITEMS_PER_PAGE = 4;
+const listPage = Object.create(null);
+
+const listPageCount = (total) => Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
+const listPageOf = (index) => Math.floor(index / ITEMS_PER_PAGE) + 1;
+
+function buildListPager(name, page, pages, total) {
+  const bar = document.createElement('div');
+  bar.className = 'list-pager';
+  bar.dataset.listPager = name;
+
+  const status = document.createElement('p');
+  status.className = 'list-pager-status';
+  status.setAttribute('aria-live', 'polite');
+  status.textContent = '共 ' + pad2(total) + ' 项 · 第 ' + pad2(page) + ' / ' + pad2(pages) + ' 页';
+
+  const controls = document.createElement('div');
+  controls.className = 'list-pager-controls';
+
+  const button = (label, value, opts) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-sm';
+    b.dataset.listPage = String(value);
+    b.textContent = label;
+    if (opts && opts.disabled) b.disabled = true;
+    if (opts && opts.current) b.setAttribute('aria-current', 'page');
+    if (opts && opts.aria) b.setAttribute('aria-label', opts.aria);
+    return b;
+  };
+
+  controls.appendChild(button('← 上一页', page - 1, { disabled: page === 1 }));
+  // 页数多时收成 01 … 04 05 06 … 12，免得页码把整行挤到换行
+  for (let p = 1; p <= pages; p++) {
+    if (pages <= 7 || p === 1 || p === pages || Math.abs(p - page) <= 1) {
+      controls.appendChild(button(pad2(p), p, { current: p === page, aria: '第 ' + p + ' 页' }));
+    } else if (!controls.lastElementChild.classList.contains('list-pager-gap')) {
+      const gap = document.createElement('span');
+      gap.className = 'list-pager-gap';
+      gap.setAttribute('aria-hidden', 'true');
+      gap.textContent = '…';
+      controls.appendChild(gap);
+    }
+  }
+  controls.appendChild(button('下一页 →', page + 1, { disabled: page === pages }));
+
+  bar.append(status, controls);
+  return bar;
+}
+
+/**
+ * 渲染某个列表的当前页。
+ * opts.revealId — 让分页跟着这个条目走（新增、上移下移跨页时用）。
+ */
+function renderItemList(name, opts) {
   const host = document.querySelector('[data-item-list="' + name + '"]');
   if (!host) return;
   const order = getOrder(name);
+  const total = order.length;
+  const pages = listPageCount(total);
+
+  if (opts && opts.revealId) {
+    const at = order.indexOf(opts.revealId);
+    if (at >= 0) listPage[name] = listPageOf(at);
+  }
+  // 删条目、或导入一份更短的备份，都可能让当前页码越界
+  const page = Math.min(Math.max(listPage[name] || 1, 1), pages);
+  listPage[name] = page;
+
   host.textContent = '';
-  if (!order.length) {
+  if (!total) {
     const empty = document.createElement('p');
     empty.className = 'item-empty';
     empty.textContent = collections[name].emptyText;
     host.appendChild(empty);
   } else {
-    order.forEach((id, index) => host.appendChild(buildItemBlock(name, id, index, order.length)));
+    const from = (page - 1) * ITEMS_PER_PAGE;
+    order.slice(from, from + ITEMS_PER_PAGE).forEach((id, i) => {
+      host.appendChild(buildItemBlock(name, id, from + i, total));
+    });
+    // 只有一页时不放分页条，而不是放一个隐藏的：省掉「父级 flex 盖掉
+    // [hidden] 的 display:none」这一整类坑
+    if (pages > 1) host.appendChild(buildListPager(name, page, pages, total));
   }
   const counter = document.querySelector('[data-item-count="' + name + '"]');
-  if (counter) counter.textContent = String(order.length);
+  if (counter) counter.textContent = String(total);
   bindFields(host);
   hydrateForm(host);
 }
@@ -1073,8 +1875,10 @@ function syncBlockTitle(input) {
   if (!block) return;
   const nameEl = block.querySelector('[data-item-title]');
   if (!nameEl) return;
-  const index = Array.prototype.indexOf.call(block.parentElement.children, block);
-  nameEl.textContent = pad2(index + 1) + ' · ' + (input.value.trim() || '未命名');
+  // 用 buildItemBlock 写下的全局序号，不再用 DOM 位置反推：分页后一页只有 4 个块，
+  // 反推出来的是 0～3，第二页的第一项会被写成 01；末尾追加的分页条也会算进去。
+  const index = Number(block.dataset.itemIndex);
+  nameEl.textContent = pad2((Number.isFinite(index) ? index : 0) + 1) + ' · ' + (input.value.trim() || '未命名');
 }
 
 function makeItemId(name) {
@@ -1095,7 +1899,9 @@ function addItem(name) {
   sec[id] = cfg.blank(order.length + 1);
   order.push(id);
   saveData();
-  renderItemList(name);
+  // 新条目在末尾，必定在最后一页。不跟过去的话下面两行会因为 DOM 里没有这个块
+  // 而静默失效，用户点了「添加」看不到任何反应。
+  renderItemList(name, { revealId: id });
   const block = document.querySelector('[data-item-block="' + name + '"][data-item-id="' + id + '"]');
   if (block) {
     block.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1128,7 +1934,9 @@ function moveItem(name, id, step) {
   order[from] = order[to];
   order[to] = id;
   saveData();
-  renderItemList(name);
+  // 跨页边界时（第 5 项上移成第 4 项）条目会离开当前页，跟着它走，
+  // 否则看起来像「按了一下，东西没了」
+  renderItemList(name, { revealId: id });
   showSaveStatus('顺序已更新');
 }
 
@@ -1137,6 +1945,16 @@ document.querySelectorAll('[data-item-add]').forEach((btn) => {
 });
 
 document.querySelector('.admin-content').addEventListener('click', (event) => {
+  // 分页按钮在 item-block 之外，得在下面那句 return 之前接住
+  const pageBtn = event.target.closest('[data-list-page]');
+  if (pageBtn) {
+    const pager = pageBtn.closest('[data-list-pager]');
+    if (pager) {
+      listPage[pager.dataset.listPager] = Number(pageBtn.dataset.listPage);
+      renderItemList(pager.dataset.listPager);
+    }
+    return;
+  }
   const block = event.target.closest('[data-item-block]');
   if (!block) return;
   const name = block.dataset.itemBlock;
@@ -1206,6 +2024,9 @@ navButtons.forEach((btn) => {
     Object.entries(sections).forEach(([key, s]) => s.el.classList.toggle('is-visible', key === target));
     document.getElementById('toolbar-heading').textContent = sections[target].title;
     document.getElementById('toolbar-sub').textContent = sections[target].sub;
+    // 「数据」页第一次露面时才去拉 Blob 清单：不开这一页的人不该为它付一次请求。
+    // 之后每次切回来也刷一下，因为期间可能上传或保存过（保存会自动回收图片）。
+    if (target === 'data') renderBlobPanel();
   });
 });
 
@@ -1245,20 +2066,64 @@ document.getElementById('copy-json').addEventListener('click', async () => {
   }
 });
 
+/* ── 导入前评估会丢掉哪些图 ────────────────────────────────────────────
+ * 收集器 collectBlobKeys 定义在文件靠前的「Blob 图片键名」一节 —— 它被三处用到
+ * （这里、选择弹窗、数据页的清单面板），而其中最早的调用发生在启动时的
+ * bindFields(document)，所以定义必须在那之前，不能留在这里。
+ *
+ * 真正执行删除的是服务端，这里算出来的数量只用于把弹窗写具体。所以弹窗
+ * **无条件出现**，不由这个函数的结果决定问不问 —— 万一两边的口径跑偏了，
+ * 最坏只是数字不准，绝不会退化成「不提示就把图删了」。
+ */
+
 // 导入
 document.getElementById('import-apply').addEventListener('click', () => {
   const text = document.getElementById('import-json').value.trim();
   if (!text) { showSaveStatus('请先粘贴 JSON'); return; }
+
+  let parsed;
   try {
-    const parsed = JSON.parse(text);
-    data = deepMerge(nestedDefaults, parsed);
-    saveData();
-    renderAllItemLists();
-    hydrateForm();
-    showSaveStatus('导入成功');
+    parsed = JSON.parse(text);
   } catch (e) {
     showSaveStatus('导入失败：JSON 格式有误');
+    return;
   }
+  // 合法 JSON 不等于合法备份。deepMerge 遇到非对象会原样返回 base，
+  // 也就是说导入一个 "123" 会静默变成「恢复默认」——连带删掉所有上传的图。
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    showSaveStatus('导入失败：顶层必须是对象');
+    return;
+  }
+  if (!('home' in parsed) && !('archive' in parsed)) {
+    showSaveStatus('导入失败：缺少 home / archive，这不像是本站的备份');
+    return;
+  }
+
+  // 必须用**合并结果**算差集，不能用 parsed：备份里缺的字段会回落到默认值
+  // （默认全是外链），那同样意味着原来那张上传图失去引用。用 parsed 会少算一批。
+  const next = deepMerge(nestedDefaults, parsed);
+  const before = collectBlobKeys(data);
+  const after = collectBlobKeys(next);
+  const dropped = [...before].filter((k) => !after.has(k));
+
+  const lines = ['确定要导入这份 JSON 吗？', '', '· 线上当前的内容会被立刻覆盖；'];
+  if (dropped.length) {
+    lines.push(
+      '· 其中 ' + dropped.length + ' 张已上传的图片会因为不再被引用而从 Blob 中永久删除，',
+      '  此项不可撤销，需要重新上传原文件才能恢复：'
+    );
+    dropped.slice(0, 5).forEach((k) => lines.push('    ' + k));
+    if (dropped.length > 5) lines.push('    …另有 ' + (dropped.length - 5) + ' 张');
+  } else {
+    lines.push('· 已上传的图片不受影响（这份备份仍然引用着它们）。');
+  }
+  if (!confirm(lines.join('\n'))) { showSaveStatus('已取消导入'); return; }
+
+  data = next;
+  saveData();
+  renderAllItemLists();
+  hydrateForm();
+  showSaveStatus('导入成功');
 });
 
 document.getElementById('import-from-file').addEventListener('click', () => {
@@ -1277,7 +2142,15 @@ document.getElementById('import-file').addEventListener('change', (e) => {
 
 // 重置
 document.getElementById('reset-all').addEventListener('click', () => {
-  if (!confirm('确定要恢复所有默认内容吗？线上当前的自定义（含新增／删除的条目）将被覆盖。')) return;
+  // 提示里必须点明图片会被删：默认内容全是外链，恢复默认等于让所有上传过的图
+  // 都变成「不再被引用」，/api/content 的自动回收会把它们从 Blob 里删掉。
+  // 只说「内容被覆盖」会让人以为图还在桶里。
+  if (!confirm(
+    '确定要恢复所有默认内容吗？\n\n' +
+    '· 线上当前的自定义（含新增／删除的条目）将被覆盖；\n' +
+    '· 上传到 Blob 的图片会因为不再被引用而被自动删除，此项不可撤销' +
+    '（需要重新上传原文件才能恢复）。'
+  )) return;
   data = structuredClone(nestedDefaults);
   renderAllItemLists();
   hydrateForm();

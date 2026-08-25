@@ -222,16 +222,53 @@ a { color: inherit; text-decoration: none; }
 }
 .field-card textarea { min-height: 72px; resize: vertical; }
 
-/* 图片链接字段下面那行上传控件（由 admin.js 注入，不写在 HTML 里）。
-   .field-card 是 gap: 8px 的 flex 列，所以这里不用自己加上边距。 */
-.upload-row {
+/* 图片字段的控制行（由 admin.js 注入，不写在 HTML 里）。
+   .field-card 是 gap: 8px 的 flex 列，所以这里不用自己加上边距。
+
+   它顶替掉的是一个 input[type="text"]，所以整行自己长成输入框的样子：同一条
+   边框、同一个底色、同一个最小高度（见下面「输入框/下拉」那段算高的注释：
+   19.5 + 18 + 2 ≈ 39.5px，这里取整到 40）。
+   不这么做的话，同一张卡片里别的字段都是规规矩矩的方框，只有这一行是几个漂在
+   白底上的按钮 —— 那就是「硬性替换」的观感，也是当前值和按钮各自散开、
+   中间空一大片的原因。 */
+.image-control {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   min-width: 0;
+  min-height: 40px;
+  /* 左边给文字留出和输入框一致的 10px 文本缩进，右边只留 6px：
+     那侧贴着的是按钮，按钮自带 1px 边框，视觉留白已经够了 */
+  padding: 5px 6px 5px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
 }
+/* 图片字段的输入框退到幕后：它继续承载值（回填、保存、导出都还认它），
+   只是不再显示。用 display:none 而不是视觉隐藏，是为了让它一并离开 Tab 序列
+   和无障碍树 —— 键盘用户不该 Tab 到一个看不见的文本框上。手填链接的能力
+   挪进了「选择图片」弹窗里的「外部链接」。 */
+.is-behind-picker { display: none; }
+/* 两个按钮都不参与伸缩，靠右挤在一起；富余宽度全给左边的当前值。 */
+.image-control .btn { flex: 0 0 auto; }
 .upload-btn { flex: 0 0 auto; }
+/* 当前值：Blob 键名缩写或外链域名。一行放不下就截断，全文在 title 里。
+   order: -1 把它挪到视觉上的第一位 —— 它接替的就是输入框那片显示文本的位置，
+   放左边、并且吃掉全部富余宽度，这一行才像个「填了值的字段」而不是一排按钮。
+   DOM 里它仍排在按钮之后，但它不可聚焦，Tab 序列不受影响。 */
+.image-value {
+  order: -1;
+  flex: 1 1 140px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.image-value[data-kind="none"] { color: var(--muted); }
 .upload-status {
   font-size: 11px;
   line-height: 1.6;
@@ -243,6 +280,22 @@ a { color: inherit; text-decoration: none; }
 }
 .upload-status[data-kind="ok"] { color: var(--accent); }
 .upload-status[data-kind="bad"] { color: var(--danger); }
+/* 上传提示挤在「当前值」和两个按钮之间的那片空白里，不单独占一行 —— 常见话术
+   都很短（「已上传（12.4 KB）」「文件过大…」），为它空出一整行只会把控制行的
+   高度白白翻倍。
+   order 和 .image-value 同为 -1：同一 order 组内按 DOM 顺序排，而 admin.js 里
+   append 的顺序是 valueEl 再 status，所以落成「当前值 → 提示 → 按钮」。
+   flex 允许收缩不允许扩张：富余宽度仍旧全归左边的当前值（那才是让这一行像个
+   填了值的字段的东西），提示只占自己那点内容宽度，贴在按钮左边。空间真不够时
+   它先靠 overflow-wrap（见上）在自己框内断行，而不是把按钮挤到第二行去。 */
+.image-control .upload-status { order: -1; flex: 0 1 auto; max-width: 100%; }
+/* 没有提示的时候把它压成 0 宽留在原地，并用负边距吃掉那 8px gap —— 不能写
+   display: none：它是 aria-live 区域，从 display:none 切回显示时部分读屏软件
+   不播报，那上传失败就成了只有看得见的人才知道的事。 */
+.image-control .upload-status:empty {
+  flex: 0 0 0;
+  margin-left: -8px;
+}
 
 /* 谁都不写死 height：box-sizing 是 border-box，早先给下拉写的 35px 扣掉 1px 边框
    和 9px 上下内边距只剩 15px 内容盒，装不下 13px × 1.5 = 19.5px 的行高，中文字形
@@ -491,6 +544,24 @@ a { color: inherit; text-decoration: none; }
 .list-toolbar p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
 .list-toolbar strong { color: var(--fg); font-family: var(--mono); }
 .list-toolbar .btn { margin-left: auto; flex: 0 0 auto; }
+
+/* 分页条：跟 .list-toolbar 同一套虚线框 + surface 底，一头一尾把列表夹住。
+   只在超过一页时才由 JS 插入，所以这里不需要任何隐藏态。 */
+.list-pager {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border: 1px dashed var(--border);
+  background: var(--surface);
+}
+.list-pager-status { margin: 0; font-size: 12px; color: var(--muted); font-family: var(--mono); }
+.list-pager-controls { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+/* 当前页只靠边框变深来表示，不另造一套高亮色：.btn 静止态本来就是 --bg，
+   压在 --surface 的分页条上已经有层次了 */
+.list-pager-controls .btn[aria-current='page'] { border-color: var(--fg); color: var(--fg); }
+.list-pager-gap { font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 0 2px; }
 .item-block { margin-bottom: 28px; }
 .item-block > .field-group { margin-bottom: 0; }
 .item-block-head {
@@ -572,6 +643,209 @@ a { color: inherit; text-decoration: none; }
   background: var(--surface);
   color: var(--fg);
   resize: vertical;
+}
+
+/* ── Blob 图片清单 ────────────────────────────────────────────────────
+   两个地方共用：「数据」页最下方的管理面板，以及图片字段的「选择图片」弹窗。
+   官方 list() 只给 key 和 etag，没有大小和上传时间，所以格子里能写的就是
+   键名缩写 + 使用状态，别指望排出时间序。 */
+.blob-card { grid-column: 1 / -1; }
+.blob-card code {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: var(--surface);
+  padding: 1px 5px;
+}
+.blob-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border: 1px dashed var(--border);
+  background: var(--surface);
+}
+.blob-count {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.blob-filters { display: flex; gap: 6px; margin-left: auto; }
+/* 数据页的上传结果紧挨着总数留在工具条左侧；筛选组仍用 auto margin 顶到右边。
+   空时压成零宽但继续渲染：aria-live 节点不能 display:none，否则部分读屏软件
+   不会播报随后写入的上传结果。 */
+.blob-upload-status { flex: 0 1 auto; }
+.blob-upload-status:empty { flex: 0 0 0; margin-left: -12px; }
+/* 选中的筛选只靠边框变深表示，与列表分页的当前页同一套语言 */
+.blob-filters .btn[aria-pressed="true"] { border-color: var(--fg); color: var(--fg); }
+/* 固定 4 列，配合 admin.js 里 BLOBS_PER_PAGE = 8 —— 一页正好两行。
+   不再用 auto-fill：那是按可用宽度自己决定列数，宽屏上一行能塞六七张，每张只有
+   130 出头，认图全靠猜。四列改为均分可用宽度：保留一行四张的阅读节奏，同时填满
+   面板，不在右侧制造一大片像「缺内容」的空白；窄了四列一起等比缩，仍是一行四张。 */
+.blob-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.blob-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 22px 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+.blob-empty[data-kind="bad"] { color: var(--danger); }
+.blob-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  text-align: left;
+  transition: border-color .2s var(--ease);
+}
+/* pick 模式整格是一个 button */
+button.blob-tile { cursor: pointer; }
+button.blob-tile:hover, button.blob-tile:focus-visible { border-color: var(--fg); }
+.blob-tile[data-current="true"] {
+  border-color: var(--fg);
+  box-shadow: inset 0 0 0 2px var(--fg);
+}
+/* 按展厅卡片里那批原图的比例开框：素材是 1242×1863，正好 2:3。这样下面的
+   object-fit: cover 基本没得可裁，格子里的构图和展厅（index.html 的 .merch-visual）
+   里看到的是同一张。之前写 1 / 1，竖图被上下各切掉四分之一，只剩中间一段，
+   一列图看过去几乎分不出谁是谁。 */
+.blob-thumb {
+  aspect-ratio: 1242 / 1863;
+  background: var(--surface-2);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.blob-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.blob-thumb span { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.blob-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+.blob-key {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.blob-badge { font-family: var(--mono); font-size: 9px; letter-spacing: .06em; }
+.blob-badge[data-use="yes"] { color: var(--accent); }
+.blob-badge[data-use="no"] { color: var(--muted); }
+.blob-current { font-family: var(--mono); font-size: 9px; letter-spacing: .06em; color: var(--fg); }
+.blob-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+.blob-actions .btn { flex: 1; padding: 0 6px; }
+/* 图片分页条：直接穿条目列表那身 .list-pager（虚线框 + surface 底 + 当前页
+   只加深边框），这里只补一句让它横跨整行 —— 它和 .blob-empty 一样，是
+   .blob-grid 的直接子元素，不加就会被当成第 5 个格子挤在一列里。 */
+.blob-pager { grid-column: 1 / -1; }
+
+/* ── 选择图片弹窗 ───────────────────────────────────────────────────── */
+.picker-backdrop {
+  position: fixed;
+  inset: 0;
+  /* 比自绘下拉的 30 高，比 .save-status 的 20 高：弹窗开着时两者都该在它下面 */
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(12px, 3vw, 40px);
+  background: oklch(0.28 0 0 / .45);
+  backdrop-filter: blur(3px);
+}
+.picker-backdrop[hidden] { display: none; }
+.picker {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 100%);
+  max-height: min(86svh, 780px);
+  border: 1px solid var(--fg);
+  background: var(--bg);
+}
+.picker-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.picker-head h3 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -.035em;
+  flex: 0 0 auto;
+}
+.picker-target {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.picker-close { margin-left: auto; flex: 0 0 auto; }
+.picker-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  border-bottom: 1px dashed var(--border);
+  background: var(--surface);
+}
+/* 网格自己滚，头尾固定：图多的时候不用把整页拉到底才够到「外部链接」 */
+.picker-body { flex: 1; min-height: 0; overflow: auto; padding: 20px; }
+.picker-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.picker-url-label { font-size: 11px; color: var(--muted); }
+.picker-url-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.picker-url-row input {
+  flex: 1;
+  min-width: 200px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  padding: 9px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.picker-url-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+@media (max-width: 720px) {
+  .picker { max-height: 92svh; }
+  .picker-head h3 { font-size: 18px; }
+  /* 手机上四列竖图要缩到 80 出头，键名和使用状态都糊成一团。这里退成两列，
+     宁可多滚两屏也要看清是哪张图（每页仍是 8 张，只是排成 4 行）。 */
+  .blob-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 .save-status {
