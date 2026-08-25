@@ -49,10 +49,6 @@
             <p>CURRENT EXHIBITION · 实时保存</p>
           </div>
 
-          <div class="notice">
-            <span><strong>提示：</strong>改动会自动保存到线上（EdgeOne KV），<strong>所有访客刷新即可看到</strong>，不再依赖本机浏览器。会话有效期 12 小时，过期后会自动回到登录页。</span>
-          </div>
-
           <h3 class="group-title">品牌与导航<span>HEADER</span></h3>
           <div class="field-group">
             <div class="field-card full">
@@ -92,7 +88,7 @@
               </div>
               <div class="field-card full">
                 <label class="field-label">主图链接 <code>hero-artwork</code></label>
-                <p class="field-hint">填图床完整链接。B 站装扮素材的链接＝<code>https://i0.hdslb.com/bfs/garb/open/</code> ＋ 图片文件名。</p>
+                <p class="field-hint">点「选择图片」从已上传的图片里挑，弹窗底部也能填任意外部图片直链；「上传图片」直接传新文件。</p>
                 <input type="text" data-field="home.hero-artwork.src" data-type="image-src">
               </div>
             </div>
@@ -112,7 +108,7 @@
 
           <h3 class="group-title">周边物品<span>MERCH · 可增删</span></h3>
           <div class="list-toolbar">
-            <p>当前共 <strong data-item-count="merch">0</strong> 件。新增或删除后打开首页即可看到卡片出现／消失；卡片序号（01 / 02 …）与 GIFT / PLAN 后缀按顺序自动重排。</p>
+            <p>当前共 <strong data-item-count="merch">0</strong> 件。新增或删除后打开首页即可看到卡片出现／消失；卡片序号（01 / 02 …）与 GIFT / PLAN 后缀按顺序自动重排。<br>下方编辑列表每页显示 4 件，超过 4 件时列表末尾出现分页；序号始终是全局的，新增和上移下移会自动翻到该物品所在页。</p>
             <button class="btn btn-primary" type="button" data-item-add="merch">+ 添加物品</button>
           </div>
           <div data-item-list="merch" data-od-id="admin-merch-list"></div>
@@ -170,7 +166,7 @@
 
           <h3 class="group-title">历史条目<span>ARCHIVE · 可增删</span></h3>
           <div class="list-toolbar">
-            <p>当前共 <strong data-item-count="archive">0</strong> 条。列表视图与表格视图会同步增删，分页页数按条目总数自动重算（每页 3 条）。</p>
+            <p>当前共 <strong data-item-count="archive">0</strong> 条。列表视图与表格视图会同步增删，<strong>展示页</strong>分页页数按条目总数自动重算（每页 3 条）。<br>下方编辑列表每页显示 4 条，与展示页的 3 条互不相干；序号始终是全局的，新增和上移下移会自动翻到该条目所在页。</p>
             <button class="btn btn-primary" type="button" data-item-add="archive">+ 添加条目</button>
           </div>
           <div data-item-list="archive" data-od-id="admin-archive-list"></div>
@@ -220,6 +216,23 @@
                 <button class="btn" type="button" id="preview-home-2">预览首页</button>
                 <button class="btn" type="button" id="preview-archive-2">预览历史展厅</button>
               </div>
+            </div>
+            <div class="data-card blob-card">
+              <h3>Blob 图片</h3>
+              <p>存储桶 <code>gyp-assets</code> 里所有由「上传图片」生成的对象。<strong>使用中</strong>＝当前内容里还引用着它；<strong>未使用</strong>＝没有任何地方引用，占着配额，可以删。<br>保存内容时会自动回收刚刚失去引用的图，所以这里剩下的「未使用」一般是<strong>上传了却没保存</strong>的那些。使用中的图不提供删除按钮 —— 要先在对应字段换掉图，保存后它会被自动回收。</p>
+              <div class="blob-toolbar">
+                <p class="blob-count" id="blob-count" role="status" aria-live="polite">尚未加载</p>
+                <span class="upload-status blob-upload-status" id="blob-upload-status" role="status" aria-live="polite"></span>
+                <div class="blob-filters" role="group" aria-label="按使用状态筛选">
+                  <button class="btn btn-sm" type="button" data-blob-filter="all" aria-pressed="true">全部</button>
+                  <button class="btn btn-sm" type="button" data-blob-filter="used" aria-pressed="false">使用中</button>
+                  <button class="btn btn-sm" type="button" data-blob-filter="free" aria-pressed="false">未使用</button>
+                </div>
+                <input class="upload-file" id="blob-upload-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                <button class="btn btn-sm upload-btn" type="button" id="blob-upload">上传图片</button>
+                <button class="btn btn-sm" type="button" id="blob-refresh">刷新列表</button>
+              </div>
+              <div class="blob-grid" id="blob-gallery" data-od-id="admin-blob-gallery"></div>
             </div>
           </div>
         </section>

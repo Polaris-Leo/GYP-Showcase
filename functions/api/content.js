@@ -7,7 +7,11 @@
  * 需要在 Pages 项目里配置：
  *   1) KV 绑定，变量名 GYP_CONTENT（与下面的 KV_BINDING 一致）
  *   2) 环境变量 ADMIN_TOKEN = 管理口令。**未设置时一律拒绝写入**，避免后台裸奔。
+ *
+ * POST 成功后还会顺手回收 Blob 里不再被引用的图片，见下方「图片垃圾回收」。
  */
+
+import { getStore } from '@edgeone/pages-blob';
 
 const KV_BINDING = 'GYP_CONTENT';
 const CONTENT_KEY = 'site-content';
@@ -111,6 +115,129 @@ function validate(payload) {
   return null;
 }
 
+/* ── 图片垃圾回收 ──────────────────────────────────────────────────────
+ * 内容哈希键名意味着换一张图不会顶掉旧的那张，旧对象会永远留在桶里。
+ * 这里在每次保存成功后，把「上一版引用过、这一版不再引用」的图删掉。
+ *
+ * 三条不能动的规矩：
+ *
+ * 1) **先写 KV，再删 Blob。** 反过来的话，一旦 KV 写失败，图已经没了而线上内容
+ *    还在引用它 —— 那是不可恢复的（字节没了）。现在这个顺序最坏也只是留下一个
+ *    孤儿对象，能通过 /api/blobs 手动清掉。
+ *
+ * 2) **按整份内容做集合差，不按字段逐个比。** 内容哈希键名让同一张图在多处引用时
+ *    共用一个键：首页和历史页可以指向同一个 img/abc.png。只从某一处移除它，
+ *    对象仍然在用。所以必须是「旧全集 − 新全集」，逐字段 diff 会删掉还在用的图。
+ *
+ * 3) **只删曾经被引用过的键，绝不按「桶里有但内容里没有」来扫。** 管理员上传完
+ *    图片、还没点保存时，对象已经在桶里但不在 KV 里；按未引用扫桶会把它当垃圾
+ *    删掉，用户会看到刚上传的图突然失效。上传却没用上的对象留作孤儿，交给
+ *    /api/blobs 手动处理 —— 少清一个是浪费，多删一个是事故。
+ */
+
+const BLOB_STORE = 'gyp-assets';
+
+// 与 upload.js 的 contentKey()、img.js 的 KEY_RE 同一口径。
+// 不匹配 /img?key= 前缀而是直接找键名本身：值可能是相对地址、绝对地址，
+// 也可能被 encodeURIComponent 编码过（img%2Fabc.png）。宽松匹配的方向是安全的——
+// 多认出一个键只会让它留在「仍被引用」集合里，不会导致误删。
+const BLOB_KEY_RE = /img\/[0-9a-f]{32}\.(?:png|jpg|webp|gif)/g;
+
+// 单次保存最多删这么多。正常改动只会产生 0～2 个，设上限是防止「清空全部内容」
+// 这类操作把一次保存拖成几十个串行 Blob 请求，最后超时。
+const MAX_DELETES = 50;
+
+// 递归深度上限。validate() 只校验了顶两层，再往下的形状是不受控的。
+const MAX_DEPTH = 8;
+
+/**
+ * 把一份内容里出现的所有 Blob 键名收集成集合。
+ * truncated 表示碰到了深度上限、这次扫描不完整。
+ */
+function collectBlobKeys(root) {
+  const keys = new Set();
+  let truncated = false;
+
+  const scan = (text) => {
+    const found = text.match(BLOB_KEY_RE);
+    if (found) for (const k of found) keys.add(k);
+  };
+
+  const walk = (node, depth) => {
+    if (depth > MAX_DEPTH) { truncated = true; return; }
+    if (typeof node === 'string') {
+      scan(node);
+      // 编码过的值（img%2Fabc.png）要解码后再扫一遍
+      try {
+        const decoded = decodeURIComponent(node);
+        if (decoded !== node) scan(decoded);
+      } catch (_) { /* 半截百分号会抛，原串已经扫过了，忽略 */ }
+      return;
+    }
+    if (Array.isArray(node)) {
+      for (const v of node) walk(v, depth + 1);
+      return;
+    }
+    if (node && typeof node === 'object') {
+      for (const v of Object.values(node)) walk(v, depth + 1);
+    }
+  };
+
+  walk(root, 0);
+  return { keys, truncated };
+}
+
+/**
+ * 删掉 previous 里引用过、next 里不再引用的图片。
+ *
+ * 调用时机只有一个：KV 写入**已经成功**之后。所以这里的任何失败都不许冒泡成
+ * 保存失败 —— 内容已经存进去了，让用户以为没存反而会诱发重复操作。
+ * 返回一个小结对象供响应体带回，null 表示无事可做。
+ */
+async function sweepUnreferenced(previous, next) {
+  // 拿不到可信的旧快照就什么都不删。宁可留孤儿，不猜。
+  if (previous === null || typeof previous !== 'object') return null;
+
+  const before = collectBlobKeys(previous);
+  const after = collectBlobKeys(next);
+
+  // 新内容没扫全 → 可能有引用没被发现 → 一个都不能删
+  if (after.truncated) return { skipped: '新内容嵌套过深，本次跳过回收' };
+
+  const stale = [...before.keys].filter((k) => !after.keys.has(k));
+  if (stale.length === 0) return null;
+
+  let store;
+  try {
+    store = getStore(BLOB_STORE);
+  } catch (e) {
+    // Blob 没配好（比如构建阶段没跑 npm install）。保存本身不受影响。
+    return { pending: stale.length, error: 'Blob 不可用：' + (e && e.message ? e.message : String(e)) };
+  }
+
+  const batch = stale.slice(0, MAX_DELETES);
+  const deleted = [];
+  const failed = [];
+  // 串行删。批量并发在这里没有收益（正常就一两个），却可能撞上 Blob 的限频。
+  for (const key of batch) {
+    try {
+      // 键不存在时 store.delete 不报错，所以不用先查存在性
+      await store.delete(key);
+      deleted.push(key);
+    } catch (e) {
+      failed.push(key);
+    }
+  }
+
+  const summary = { deleted };
+  if (failed.length) summary.failed = failed;
+  // 超出上限的部分明确报出来，不做静默截断
+  if (stale.length > batch.length) summary.pending = stale.length - batch.length;
+  // 删掉的对象在 /img 上还有 CDN 缓存（键名声明了 immutable），
+  // 不会张冠李戴（内容哈希键名不复用），但「已删除」不会立刻在公开路径生效。
+  return summary;
+}
+
 async function handle(request, env) {
   const method = request.method.toUpperCase();
 
@@ -174,12 +301,30 @@ async function handle(request, env) {
     const invalid = validate(payload);
     if (invalid) return json({ error: invalid }, 400);
 
+    // 必须在写入**之前**读旧内容：写完就再也无从知道哪些图刚刚被移除。
+    // 读失败或旧数据是坏 JSON 时保持 null，本次不回收（见 sweepUnreferenced）。
+    let previous = null;
+    try {
+      const rawPrev = await kv.get(CONTENT_KEY);
+      if (rawPrev) previous = JSON.parse(rawPrev);
+    } catch (_) {
+      previous = null;
+    }
+
     try {
       await kv.put(CONTENT_KEY, JSON.stringify(payload));
-      return json({ ok: true });
     } catch (e) {
       return json({ error: '写入失败：' + (e && e.message ? e.message : String(e)) }, 502);
     }
+
+    // ↓ 内容已经落盘。从这里往下无论出什么错，这次保存都是成功的。
+    let gc = null;
+    try {
+      gc = await sweepUnreferenced(previous, payload);
+    } catch (e) {
+      gc = { error: '回收异常：' + (e && e.message ? e.message : String(e)) };
+    }
+    return json(gc ? { ok: true, gc } : { ok: true });
   }
 
   return json({ error: '不支持的方法：' + method }, 405, { Allow: 'GET, POST, OPTIONS' });

@@ -1,7 +1,7 @@
 /**
  * /api/blobs — 已上传图片的清单与删除（EdgeOne Pages Function + Pages Blob）
  *
- * GET    /api/blobs            → { blobs: [{ key, etag, url }], count, truncated }
+ * GET    /api/blobs            → { blobs: [{ key, etag, url }], count, total, truncated }
  * DELETE /api/blobs?key=…      → { ok: true }
  *
  * 两个方法都要求已登录。列表虽然只暴露键名（键名本来就能通过 /img 公开读到），
@@ -10,7 +10,8 @@
  * 存在的理由是配额：Blob 有容量上限，而内容哈希键名意味着换一张图不会顶掉旧的那张，
  * 旧对象会一直留着。没有一个地方能看见和清掉它们，桶迟早会满。
  *
- * ⚠️ 目前只有接口，后台还没有对应界面，清理要自己发请求。
+ * 后台界面：「数据」页最下方的「Blob 图片」面板（列表 + 删除），
+ * 以及图片字段的「选择图片」弹窗（只读取列表）。
  */
 
 import { getStore } from '@edgeone/pages-blob';
@@ -22,8 +23,10 @@ const KEY_PREFIX = 'img/';
 // 删除也照这条限制，免得这个接口变成能抹掉桶里任意对象的工具。
 const KEY_RE = /^img\/[0-9a-f]{32}\.(png|jpg|webp|gif)$/;
 
-// 一次最多列这么多。桶里对象可能很多，SDK 默认会把所有分页聚合成一个数组，
-// 不设上限的话响应体可以大到没法用。
+// 一次最多返回这么多。**注意 store.list() 没有 limit 选项**（官方文档里可用的只有
+// prefix / directories / paginate / cursor / consistency），默认行为是把所有分页
+// 聚合成一个数组。所以上限只能在这里自己截，截之前先记下真实总数 —— 不然
+// truncated 就是猜的。
 const LIST_LIMIT = 500;
 
 const JSON_HEADERS = {
@@ -120,18 +123,29 @@ async function handle(request, env) {
 
   if (method === 'GET') {
     try {
-      const res = await store.list({ prefix: KEY_PREFIX, limit: LIST_LIMIT });
-      const blobs = (res && res.blobs ? res.blobs : []).map((b) => ({
-        key: b.key,
-        etag: b.etag,
-        url: '/img?key=' + encodeURIComponent(b.key),
-      }));
+      // 只传 prefix：limit 不是合法选项，传了会被忽略，留着会让人误以为服务端截过了。
+      const res = await store.list({ prefix: KEY_PREFIX });
+      const all = res && res.blobs ? res.blobs : [];
+      // 键名固定 36 字符，理论上不会有杂项；但桶是可以被别的途径写入的，
+      // 列表里混进不认识的键名时不要展示 —— 前端会拿它去拼 /img，那条路也认同一条正则。
+      const clean = all.filter((b) => b && KEY_RE.test(b.key));
+      const page = clean.slice(0, LIST_LIMIT);
       return json({
-        blobs,
-        count: blobs.length,
-        // 刚好顶到上限时提示一下：可能还有没列出来的
-        truncated: blobs.length >= LIST_LIMIT,
+        blobs: page.map((b) => ({
+          key: b.key,
+          // etag 是 list 唯一多给的字段：没有 size，也没有上传时间。
+          // 所以前端排不出「最新上传」，只能按键名排（见 admin.js 的说明）。
+          etag: b.etag,
+          url: '/img?key=' + encodeURIComponent(b.key),
+        })),
+        count: page.length,
+        total: clean.length,
+        // 真实总数超了才叫截断；原来写的是 length >= LIMIT，桶里刚好 500 个
+        // 完整列表也会被报成「可能还有」。
+        truncated: clean.length > LIST_LIMIT,
         limit: LIST_LIMIT,
+        // 被过滤掉的非法键名数量，方便发现桶里有别的东西
+        skipped: all.length - clean.length,
       });
     } catch (e) {
       return blobError(e);
