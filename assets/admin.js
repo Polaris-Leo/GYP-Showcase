@@ -1064,7 +1064,7 @@ function attachImageControls(scope) {
     picker.type = 'file';
     picker.accept = UPLOAD_TYPES.join(',');
     picker.className = 'upload-file';
-    // 原生 file 控件样式无法统一，藏起来用按钮代劳
+    // 原生 file 控件样式无法统一，藏起来用按钮代劳；按钮点击时触发 picker.click()。
     picker.hidden = true;
 
     const btn = document.createElement('button');

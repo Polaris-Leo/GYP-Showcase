@@ -28,7 +28,7 @@ const STORE_NAME = 'gyp-assets';
  * 也不会因为存在这个公开路由而被人凭键名读出去。放宽成 `img/*` 或允许任意键，
  * 就等于把整个桶变成公开只读接口。
  */
-const KEY_RE = /^img\/[0-9a-f]{32}\.(png|jpg|webp|gif)$/;
+const KEY_RE = /^img\/[0-9a-f]{32}\.(png|jpg|webp|gif)$(?![\s\S])/;
 
 const MIME = {
   png: 'image/png',
@@ -69,8 +69,14 @@ async function handle(request) {
   // 内容变了键名必然变，不需要再去 getMetadata 多问一次。
   const etag = '"' + key.slice(4, 36) + '"';
 
-  const inm = request.headers.get('If-None-Match');
-  if (inm && inm.includes(etag.slice(1, -1))) {
+  const inm = (request.headers.get('If-None-Match') || '').trim();
+  const inmMatch =
+    inm === '*' ||
+    inm.split(',').some((t) => {
+      const s = t.trim();
+      return s === etag || s === `W/${etag}`;
+    });
+  if (inmMatch) {
     return new Response(null, { status: 304, headers: { ETag: etag, 'Cache-Control': HIT_CACHE } });
   }
 
