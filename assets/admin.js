@@ -24,28 +24,28 @@ const defaults = {
     'nav-history': '历史展厅',
     'nav-captain': '舰长礼物',
     'hero-heading': '把一片天空\n带回家。',
-    'hero-intro': '这里收录与鸽一品角色故事有关的周边设想：可以收藏、可以相赠，也可以在未来成为真实的发售企划。每一件都有它的画面、来处与说明。',
+    'hero-intro': '这里收录与鸽一品角色故事有关的周边：可以收藏、可以相赠，也可以成为未来的发售企划。每一件都有它的画面、来处与说明。',
     'hero-primary-cta': '浏览本期展厅',
     'hero-artwork.src': 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
     'collection-heading': '周边清单\n× 04',
     merchOrder: ['merch-sky', 'merch-plush', 'merch-birthday', 'merch-cafe'],
     'merch-sky.title': '云上通行证',
-    'merch-sky.meta': '设想：入会纪念票卡／无售价／限时寄送',
+    'merch-sky.meta': '企划中：入会纪念票卡／无售价／限时寄送',
     'merch-sky.note': '把晴空、白鸽和长长的缎带压进一张可被收藏的通行证，留给一起飞过这段旅程的人。',
     'merch-sky.image': 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
     'merch-sky.type': 'gift',
     'merch-plush.title': '云团抱枕',
-    'merch-plush.meta': '设想：异形抱枕／无售价／季度礼物',
+    'merch-plush.meta': '企划中：异形抱枕／无售价／季度礼物',
     'merch-plush.note': '用画面中被拥抱的小鸟做成软软的轮廓，作为桌面和沙发上的陪伴物。',
     'merch-plush.image': 'https://i0.hdslb.com/bfs/garb/open/171b8d6f02d93b4ee97fa230eff3ecad5e63e9fd.png',
     'merch-plush.type': 'gift',
     'merch-birthday.title': '生日小夜灯',
-    'merch-birthday.meta': '设想：亚克力夜灯／待定／生日限定',
+    'merch-birthday.meta': '企划中：亚克力夜灯／以官方信息为准／生日限定',
     'merch-birthday.note': '生日画面的糖果色被裁成一盏小灯；点亮时，桌面像刚刚拆开一份礼物。',
     'merch-birthday.image': 'https://i0.hdslb.com/bfs/garb/open/436cd3b761aaa29766c7fad8e44b4672f7734eef.png',
     'merch-birthday.type': 'sale',
     'merch-cafe.title': '星屿立牌',
-    'merch-cafe.meta': '设想：双层亚克力／待定／常规收藏',
+    'merch-cafe.meta': '企划中：双层亚克力／以官方信息为准／常规收藏',
     'merch-cafe.note': '前景是认真端盘的鸽一品，背面藏着忙碌的小白鸽；从不同角度看，像一段有声音的餐桌故事。',
     'merch-cafe.image': 'https://i0.hdslb.com/bfs/garb/item/c6836114214dcba20fcc30167be8239863b9083e.png',
     'merch-cafe.type': 'sale',
@@ -56,36 +56,36 @@ const defaults = {
     'nav-current-collection': '当前展厅',
     'nav-archive-list': '历史展厅',
     'archive-title': '让每一件，\n都有来处。',
-    'archive-intro': '这里收录曾经出现过的周边与纪念物。首批六件作为档案模板：名称与时间线用于展示，图片、规格、获得方式仍待对应的真实资料补全。',
+    'archive-intro': '这里收录曾经出现过的周边与纪念物，并持续整理名称、时间线、图片、规格与获得方式。',
     itemOrder: ['item-star', 'item-badge', 'item-card', 'item-keychain', 'item-color-paper', 'item-summer'],
     'item-star.title': '星羽立牌',
     'item-star.date': '2025\n10',
-    'item-star.desc': '首批历史档案的示例条目：以飞鸟和缎带为轮廓的双层亚克力立牌，待补充真实设计稿、尺寸与发售渠道。',
+    'item-star.desc': '以飞鸟和缎带为轮廓的双层亚克力立牌，呈现轻盈而富有层次的天空主题。',
     'item-star.image': 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
     'item-star.category': '亚克力立牌',
     'item-badge.title': '云团徽章组',
     'item-badge.date': '2025\n11',
-    'item-badge.desc': '以云朵、小鸟和表情切片组织的收藏徽章组。此处用于记录日后需要补录的图案、工艺与实际发售月份。',
+    'item-badge.desc': '以云朵、小鸟和表情切片组织的收藏徽章组，记录角色日常中的轻快片段。',
     'item-badge.image': 'https://i0.hdslb.com/bfs/garb/open/171b8d6f02d93b4ee97fa230eff3ecad5e63e9fd.png',
     'item-badge.category': '马口铁徽章',
     'item-card.title': '冬日天空透卡',
     'item-card.date': '2025\n12',
-    'item-card.desc': '一组围绕节日问候设计的透明卡片。档案完成时可在此补上每张卡的正反面、套组数量与原始包装照片。',
+    'item-card.desc': '一组围绕节日问候设计的透明卡片，以轻盈的层叠画面收录冬日祝福。',
     'item-card.image': 'https://i0.hdslb.com/bfs/garb/open/436cd3b761aaa29766c7fad8e44b4672f7734eef.png',
     'item-card.category': '透卡套组',
     'item-keychain.title': '羽毛信笺挂件',
     'item-keychain.date': '2026\n02',
-    'item-keychain.desc': '以角色来信作为概念的金属或亚克力挂件。这里保留了一个适合补入挂件实拍、材质与随附卡片说明的位置。',
+    'item-keychain.desc': '以角色来信为概念的金属或亚克力挂件，将轻巧的书信意象收进随身收藏。',
     'item-keychain.image': 'https://i0.hdslb.com/bfs/garb/item/c6836114214dcba20fcc30167be8239863b9083e.png',
     'item-keychain.category': '钥匙扣／挂件',
     'item-color-paper.title': '生日纪念色纸',
     'item-color-paper.date': '2026\n04',
-    'item-color-paper.desc': '用于记录一年一次的祝福时刻。后续可增加绘师、签名形式、寄送范围与完整包装等已确认资料。',
+    'item-color-paper.desc': '用于记录一年一次的祝福时刻，将明亮的生日主题留在可被珍藏的纸面上。',
     'item-color-paper.image': 'https://i0.hdslb.com/bfs/garb/open/436cd3b761aaa29766c7fad8e44b4672f7734eef.png',
     'item-color-paper.category': '纪念色纸',
     'item-summer.title': '夏日集会立牌',
     'item-summer.date': '2026\n06',
-    'item-summer.desc': '这一页时间线暂以夏日主题收束。未来替换为实物照后，可成为浏览历年物品、补充再售讯息的长期档案入口。',
+    'item-summer.desc': '以夏日主题收束这段时间线，作为历年物品与再售讯息的长期档案入口。',
     'item-summer.image': 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
     'item-summer.category': '亚克力立牌'
   }
@@ -1064,7 +1064,7 @@ function attachImageControls(scope) {
     picker.type = 'file';
     picker.accept = UPLOAD_TYPES.join(',');
     picker.className = 'upload-file';
-    // 原生 file 控件样式无法统一，藏起来用按钮代劳；按钮点击时触发 picker.click()。
+    // 原生 file 控件样式无法统一，藏起来用按钮代劳
     picker.hidden = true;
 
     const btn = document.createElement('button');
@@ -1192,8 +1192,8 @@ const collections = {
     ],
     blank: (n) => ({
       title: '新物品 ' + pad2(n),
-      meta: '设想：待补充／待定／待定',
-      note: '在这里写下这件物品的设想：画面从哪来、想用什么材质，以及它为什么值得被收藏。',
+      meta: '企划中：周边／信息更新中／以官方信息为准',
+      note: '记录这件物品的画面来源、材质与收藏故事。',
       image: 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
       type: 'gift'
     })
@@ -1217,9 +1217,9 @@ const collections = {
     blank: (n) => ({
       title: '新条目 ' + pad2(n),
       date: new Date().getFullYear() + '\n' + pad2(new Date().getMonth() + 1),
-      desc: '在这里补充这件历史物品的资料：设计概念、材质规格、获得方式与实物照片的来源。',
+      desc: '记录这件历史物品的设计概念、材质规格、获得方式与相关资料。',
       image: 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
-      category: '待补充'
+      category: '未分类'
     })
   }
 };
