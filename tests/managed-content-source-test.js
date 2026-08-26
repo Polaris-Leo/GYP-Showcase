@@ -6,8 +6,13 @@ const path = require('path');
 const SITE = path.join(__dirname, '..');
 const indexSrc = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
 const archiveSrc = fs.readFileSync(path.join(SITE, 'history-archive.html'), 'utf8');
-const indexMarkup = indexSrc.slice(0, indexSrc.indexOf('<script>'));
-const archiveMarkup = archiveSrc.slice(0, archiveSrc.indexOf('<script>'));
+function sliceBeforeScript(src, file) {
+  const marker = src.search(/<script\b/i);
+  if (marker < 0) throw new Error(file + ' 缺少 <script> 标记，无法提取静态 HTML 区域');
+  return src.slice(0, marker);
+}
+const indexMarkup = sliceBeforeScript(indexSrc, 'index.html');
+const archiveMarkup = sliceBeforeScript(archiveSrc, 'history-archive.html');
 
 const failures = [];
 let passed = 0;
