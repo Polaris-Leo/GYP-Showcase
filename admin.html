@@ -1,6 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
-<head>
+<html lang="zh-CN"><head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>后台 · 鸽一品周边展厅</title>
@@ -88,7 +87,6 @@
               </div>
               <div class="field-card full">
                 <label class="field-label">主图链接 <code>hero-artwork</code></label>
-                <p class="field-hint">点「选择图片」从已上传的图片里挑，弹窗底部也能填任意外部图片直链；「上传图片」直接传新文件。</p>
                 <input type="text" data-field="home.hero-artwork.src" data-type="image-src">
               </div>
             </div>
@@ -106,14 +104,14 @@
             </div>
           </div>
 
-          <h3 class="group-title">周边物品<span>MERCH · 可增删</span></h3>
+          <h3 class="group-title">舰礼/周边<span>MERCH · 可增删</span></h3>
           <div class="list-toolbar">
             <p>当前共 <strong data-item-count="merch">0</strong> 件。新增或删除后打开首页即可看到卡片出现／消失；卡片序号（01 / 02 …）与 GIFT / PLAN 后缀按顺序自动重排。<br>下方编辑列表每页显示 4 件，超过 4 件时列表末尾出现分页；序号始终是全局的，新增和上移下移会自动翻到该物品所在页。</p>
             <button class="btn btn-primary" type="button" data-item-add="merch">+ 添加物品</button>
           </div>
           <div data-item-list="merch" data-od-id="admin-merch-list"></div>
 
-          <h3 class="group-title">舰长礼物区块<span>CAPTAIN</span></h3>
+          <h3 class="group-title">底部文字区块<span>CAPTAIN</span></h3>
           <div class="field-group">
             <div class="field-card full">
               <label class="field-label">区块大标题 <code>captain-heading</code></label>
@@ -195,7 +193,7 @@
             <div class="data-card">
               <h3>导入 JSON</h3>
               <p>粘贴之前导出的 JSON 数据，点击导入后会覆盖当前所有自定义内容。</p>
-              <textarea id="import-json" spellcheck="false" placeholder='{ "home": { ... }, "archive": { ... } }'></textarea>
+              <textarea id="import-json" spellcheck="false" placeholder="{ &quot;home&quot;: { ... }, &quot;archive&quot;: { ... } }"></textarea>
               <div class="btn-row">
                 <button class="btn btn-primary" type="button" id="import-apply">导入并应用</button>
                 <input type="file" id="import-file" accept="application/json" style="display:none">
@@ -228,7 +226,7 @@
                   <button class="btn btn-sm" type="button" data-blob-filter="used" aria-pressed="false">使用中</button>
                   <button class="btn btn-sm" type="button" data-blob-filter="free" aria-pressed="false">未使用</button>
                 </div>
-                <input class="upload-file" id="blob-upload-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+                <input class="upload-file" id="blob-upload-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden="">
                 <button class="btn btn-sm upload-btn" type="button" id="blob-upload">上传图片</button>
                 <button class="btn btn-sm" type="button" id="blob-refresh">刷新列表</button>
               </div>
@@ -244,5 +242,6 @@
   <div class="save-status" id="save-status" aria-live="polite">已自动保存</div>
 
   <script src="assets/admin.js" defer></script>
-</body>
-</html>
+
+
+</body></html>

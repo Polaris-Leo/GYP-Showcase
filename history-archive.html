@@ -324,12 +324,18 @@
     backToTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
 
     // 站点内容由 admin.html 编辑，存放在 EdgeOne KV，经 /api/content 读取；公开物品
-    // 只在拿到后台配置后创建，接口不可用时不显示任何旧的内置条目。
-    (async function applySiteContent() {
+    // 只在拿到后台配置后创建。
+    async function fetchSiteContent() {
       try {
         const res = await fetch('/api/content', { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = await res.json();
+        if (res.ok) return await res.json();
+      } catch (_) { /* 本地没有函数运行时，返回空内容 */ }
+      return null;
+    }
+    (async function applySiteContent() {
+      try {
+        const data = await fetchSiteContent();
+        if (!data) return;
         const overrides = (data && data.archive) || {};
         if (!Object.keys(overrides).length) return;
         const get = (obj, path) => {
@@ -341,16 +347,12 @@
           }
           return n;
         };
+        // 后台字段最终会进 innerHTML（dialog-details），必须先转义再拼
+        const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const setText = (id, value) => {
           const el = document.querySelector(`[data-od-id="${id}"]`);
           if (el && value != null && typeof value === 'string') {
-            if (value.includes('\n')) {
-              el.innerHTML = value.split('\n').map((s) =>
-                s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-              ).join('<br>');
-            } else {
-              el.textContent = value;
-            }
+            el.innerHTML = value.split('\n').map(esc).join('<br>');
           }
         };
 
@@ -415,6 +417,11 @@
             const o = get(overrides, key) || {};
             const itemKey = String(key).replace(/^item-/, '');
             const status = 'ARCHIVE ' + pad2(index + 1);
+            // 「资料状态」「获得方式」来自后台字段；旧数据缺字段（或留空）时落到兜底值。
+            // 前者同时喂给列表状态行、表格角标和弹窗，后者喂给列表 meta 和弹窗。
+            const trimVal = (v) => (v == null ? '' : String(v).trim());
+            const stateVal = trimVal(o.state) || '档案收录';
+            const gainVal = trimVal(o.gain) || '以官方信息为准';
 
             let listItem = existingList.get(itemKey);
             const listIsNew = !listItem;
@@ -430,7 +437,7 @@
 
             // ── 列表视图 ──
             const statusEl = listItem.querySelector('.archive-status');
-            if (statusEl) statusEl.textContent = status + ' / 档案收录';
+            if (statusEl) statusEl.textContent = status + ' / ' + stateVal;
             if (o.title != null) { const h = listItem.querySelector('h3'); if (h) h.textContent = o.title; }
             if (o.date != null && typeof o.date === 'string') {
               const d = listItem.querySelector('.archive-date');
@@ -446,13 +453,15 @@
               const p = listItem.querySelector('.archive-copy > p:not(.archive-status):not(.archive-meta)');
               if (p) p.textContent = o.desc;
             }
-            if (o.category != null) {
-              const meta = listItem.querySelector('.archive-meta');
-              if (meta) {
-                meta.textContent = '类别：' + o.category;
-                meta.appendChild(document.createElement('br'));
-                meta.appendChild(document.createTextNode('获得方式：以官方信息为准'));
+            const listMeta = listItem.querySelector('.archive-meta');
+            if (listMeta) {
+              listMeta.textContent = '';
+              const cat = o.category != null ? String(o.category) : '';
+              if (cat) {
+                listMeta.appendChild(document.createTextNode('类别：' + cat));
+                listMeta.appendChild(document.createElement('br'));
               }
+              listMeta.appendChild(document.createTextNode('获得方式：' + gainVal));
             }
             const listImg = listItem.querySelector('.archive-image img');
             if (listImg) {
@@ -470,7 +479,7 @@
               gridCard.setAttribute('aria-label', '查看' + o.title + '物品说明');
             }
             const gridNote = gridCard.querySelector('.grid-copy > p');
-            if (gridNote) gridNote.textContent = status + ' ／ 档案收录';
+            if (gridNote) gridNote.textContent = status + ' ／ ' + stateVal;
             const gridImg = gridCard.querySelector('.grid-image img');
             if (gridImg) {
               if (o.image) gridImg.src = o.image;
@@ -485,13 +494,8 @@
             if (o.title != null) { entry.title = o.title; if (gridIsNew) entry.alt = o.title + '图片'; }
             if (o.desc != null) entry.description = o.desc;
             if (o.image) entry.image = o.image;
-            if (o.category != null) {
-              if (gridIsNew) {
-                entry.details = '类别：' + o.category + '<br>资料状态：档案收录<br>获得方式：以官方信息为准';
-              } else if (entry.details) {
-                entry.details = entry.details.replace(/^类别：[^<]*/, '类别：' + o.category);
-              }
-            }
+            const cat = o.category != null ? String(o.category) : '';
+            entry.details = '类别：' + esc(cat) + '<br>资料状态：' + esc(stateVal) + '<br>获得方式：' + esc(gainVal);
 
             keptList.push(listItem);
             keptGrid.push(gridCard);

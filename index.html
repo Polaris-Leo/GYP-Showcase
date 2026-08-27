@@ -184,7 +184,9 @@
     .merch-info h3 { margin: auto 0 12px; font-family: var(--display); font-size: clamp(27px, 2.6vw, 43px); font-weight: 700; letter-spacing: -.055em; line-height: 1; }
     .merch-meta { margin: 0 0 15px; font-size: 11px; line-height: 1.6; color: var(--muted); }
     .merch-note { margin-bottom: 20px; font-size: 13px; line-height: 1.65; }
-    .detail-link { align-self: flex-start; margin-top: auto; border: 0; border-bottom: 1px solid var(--fg); padding: 0 0 3px; background: transparent; cursor: pointer; font-size: 12px; }
+    .merch-footer { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-top: auto; }
+    .detail-link { align-self: flex-start; margin-top: 0; border: 0; border-bottom: 1px solid var(--fg); padding: 0 0 3px; background: transparent; cursor: pointer; font-size: 12px; }
+    .merch-status { color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .04em; line-height: 1.4; text-align: right; }
     .detail-link:hover { border-color: var(--accent); }
 
     .captain-note {
@@ -548,12 +550,18 @@
     document.querySelectorAll('.reveal').forEach((element) => observer.observe(element));
 
     // 站点内容由 admin.html 编辑，存放在 EdgeOne KV，经 /api/content 读取；公开物品
-    // 只在拿到后台配置后创建，接口不可用时不显示任何旧的内置物品。
-    (async function applySiteContent() {
+    // 只在拿到后台配置后创建。
+    async function fetchSiteContent() {
       try {
         const res = await fetch('/api/content', { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = await res.json();
+        if (res.ok) return await res.json();
+      } catch (_) { /* 本地没有函数运行时，返回空内容 */ }
+      return null;
+    }
+    (async function applySiteContent() {
+      try {
+        const data = await fetchSiteContent();
+        if (!data) return;
         const overrides = (data && data.home) || {};
         if (!Object.keys(overrides).length) return;
         const get = (obj, path) => {
@@ -565,17 +573,13 @@
           }
           return n;
         };
+        // 后台字段最终会进 innerHTML（dialog-details），必须先转义再拼
+        const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const setText = (id, value) => {
           const el = document.querySelector(`[data-od-id="${id}"]`);
           if (el && value != null) {
             if (typeof value !== 'string') return;
-            if (value.includes('\n')) {
-              el.innerHTML = value.split('\n').map((s) =>
-                s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-              ).join('<br>');
-            } else {
-              el.textContent = value;
-            }
+            el.innerHTML = value.split('\n').map(esc).join('<br>');
           }
         };
         const setImageSrc = (id, value) => {
@@ -618,7 +622,7 @@
               '<h3></h3>' +
               '<p class="merch-meta"></p>' +
               '<p class="merch-note"></p>' +
-              '<button class="detail-link" type="button">查看物品说明</button>' +
+              '<div class="merch-footer"><button class="detail-link" type="button">查看物品说明</button><span class="merch-status"></span></div>' +
             '</div>';
           const link = card.querySelector('.detail-link');
           if (link) link.dataset.odId = 'detail-' + itemKey;
@@ -645,7 +649,6 @@
             if (indexSpans[0]) indexSpans[0].textContent = number;
             if (indexSpans[1]) indexSpans[1].textContent = typeLabels[type];
             if (o.title != null) { const h = card.querySelector('h3'); if (h) h.textContent = o.title; }
-            if (o.meta != null) { const m = card.querySelector('.merch-meta'); if (m) m.textContent = o.meta; }
             if (o.note != null) { const n = card.querySelector('.merch-note'); if (n) n.textContent = o.note; }
             const img = card.querySelector('.merch-visual img');
             if (img) {
@@ -653,7 +656,10 @@
               if (isNew && o.title) img.alt = o.title + '图片';
             }
 
-            // 同步弹窗数据；新卡片补一份默认说明
+            // 同步弹窗数据。状态、规格信息是独立字段；获得方式取自卡片那行小字
+            // （meta）的第二段「品类／获得方式／售价」。还没经后台重存的旧数据
+            // 没有 home.merchMetaOrder 标记，仍是「品类／售价／获得方式」，因此从
+            // 末段读取，避免访客在迁移前看到售价被误当成获得方式。
             const entry = merchandise[itemKey] || (merchandise[itemKey] = {
               number: '', title: '', image: 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png', alt: '', description: '', details: ''
             });
@@ -661,9 +667,32 @@
             if (o.title != null) { entry.title = o.title; if (isNew) entry.alt = o.title; }
             if (o.note != null) entry.description = o.note;
             if (o.image) entry.image = o.image;
-            const gain = '获得方式：' + typeLabels[type];
-            if (isNew) entry.details = gain + '<br>状态：企划中，尚未开放<br>规格信息：以官方信息为准';
-            else if (entry.details) entry.details = entry.details.replace(/^获得方式：[^<]*/, gain);
+            const metaRaw = String(o.meta != null ? o.meta : '');
+            const colonAt = metaRaw.indexOf('：');
+            const legacyState = (colonAt >= 0 ? metaRaw.slice(0, colonAt) : '').trim();
+            const metaBody = colonAt >= 0 ? metaRaw.slice(colonAt + 1) : metaRaw;
+            const metaParts = metaBody.split('／');
+            const isTargetOrder = get(overrides, 'merchMetaOrder') === 'kind-how-price';
+            // 无标记的旧数据仍按「品类／售价／获得方式」存储；展示时即时换位，
+            // 让卡片与后台新顺序一致，且不等待管理员下一次保存。
+            const cardMetaParts = isTargetOrder
+              ? metaParts.slice()
+              : [metaParts[0] || '', metaParts.slice(2).join('／'), metaParts[1] || ''];
+            while (cardMetaParts.length && !cardMetaParts[cardMetaParts.length - 1]) cardMetaParts.pop();
+            if (o.meta != null) {
+              const m = card.querySelector('.merch-meta');
+              if (m) m.textContent = cardMetaParts.join('／');
+            }
+            const metaHow = (isTargetOrder ? metaParts[1] : metaParts.slice(2).join('／')).trim();
+            const gain = metaHow || typeLabels[type];
+            const status = (o.status != null ? String(o.status).trim() : '') || legacyState || '企划中，尚未开放';
+            const cardStatus = card.querySelector('.merch-status');
+            if (cardStatus) {
+              cardStatus.textContent = status;
+              cardStatus.dataset.odId = 'status-' + itemKey;
+            }
+            const spec = (o.spec != null && String(o.spec).trim()) ? String(o.spec) : '以官方信息为准';
+            entry.details = '获得方式：' + esc(gain) + '<br>状态：' + esc(status) + '<br>规格信息：' + esc(spec);
 
             if (isNew) {
               grid.appendChild(card);
