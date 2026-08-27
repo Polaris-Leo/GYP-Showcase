@@ -28,27 +28,37 @@ const defaults = {
     'hero-primary-cta': '浏览本期展厅',
     'hero-artwork.src': 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
     'collection-heading': '周边清单\n× 04',
+    // 标记首页物品 meta 的固定三段顺序，供后台迁移与展示页兼容旧数据。
+    merchMetaOrder: 'kind-how-price',
     merchOrder: ['merch-sky', 'merch-plush', 'merch-birthday', 'merch-cafe'],
     'merch-sky.title': '云上通行证',
-    'merch-sky.meta': '企划中：入会纪念票卡／无售价／限时寄送',
+    'merch-sky.meta': '入会纪念票卡／限时寄送／无售价',
+    'merch-sky.status': '企划中',
     'merch-sky.note': '把晴空、白鸽和长长的缎带压进一张可被收藏的通行证，留给一起飞过这段旅程的人。',
     'merch-sky.image': 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
     'merch-sky.type': 'gift',
+    'merch-sky.spec': '以官方信息为准',
     'merch-plush.title': '云团抱枕',
-    'merch-plush.meta': '企划中：异形抱枕／无售价／季度礼物',
+    'merch-plush.meta': '异形抱枕／季度礼物／无售价',
+    'merch-plush.status': '企划中',
     'merch-plush.note': '用画面中被拥抱的小鸟做成软软的轮廓，作为桌面和沙发上的陪伴物。',
     'merch-plush.image': 'https://i0.hdslb.com/bfs/garb/open/171b8d6f02d93b4ee97fa230eff3ecad5e63e9fd.png',
     'merch-plush.type': 'gift',
+    'merch-plush.spec': '以官方信息为准',
     'merch-birthday.title': '生日小夜灯',
-    'merch-birthday.meta': '企划中：亚克力夜灯／以官方信息为准／生日限定',
+    'merch-birthday.meta': '亚克力夜灯／生日限定／以官方信息为准',
+    'merch-birthday.status': '企划中',
     'merch-birthday.note': '生日画面的糖果色被裁成一盏小灯；点亮时，桌面像刚刚拆开一份礼物。',
     'merch-birthday.image': 'https://i0.hdslb.com/bfs/garb/open/436cd3b761aaa29766c7fad8e44b4672f7734eef.png',
     'merch-birthday.type': 'sale',
+    'merch-birthday.spec': '以官方信息为准',
     'merch-cafe.title': '星屿立牌',
-    'merch-cafe.meta': '企划中：双层亚克力／以官方信息为准／常规收藏',
+    'merch-cafe.meta': '双层亚克力／常规收藏／以官方信息为准',
+    'merch-cafe.status': '企划中',
     'merch-cafe.note': '前景是认真端盘的鸽一品，背面藏着忙碌的小白鸽；从不同角度看，像一段有声音的餐桌故事。',
     'merch-cafe.image': 'https://i0.hdslb.com/bfs/garb/item/c6836114214dcba20fcc30167be8239863b9083e.png',
     'merch-cafe.type': 'sale',
+    'merch-cafe.spec': '以官方信息为准',
     'captain-heading': '礼物不是门槛，\n是一起留下的记号。'
   },
   archive: {
@@ -63,31 +73,43 @@ const defaults = {
     'item-star.desc': '以飞鸟和缎带为轮廓的双层亚克力立牌，呈现轻盈而富有层次的天空主题。',
     'item-star.image': 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
     'item-star.category': '亚克力立牌',
+    'item-star.state': '档案收录',
+    'item-star.gain': '以官方信息为准',
     'item-badge.title': '云团徽章组',
     'item-badge.date': '2025\n11',
     'item-badge.desc': '以云朵、小鸟和表情切片组织的收藏徽章组，记录角色日常中的轻快片段。',
     'item-badge.image': 'https://i0.hdslb.com/bfs/garb/open/171b8d6f02d93b4ee97fa230eff3ecad5e63e9fd.png',
     'item-badge.category': '马口铁徽章',
+    'item-badge.state': '档案收录',
+    'item-badge.gain': '以官方信息为准',
     'item-card.title': '冬日天空透卡',
     'item-card.date': '2025\n12',
     'item-card.desc': '一组围绕节日问候设计的透明卡片，以轻盈的层叠画面收录冬日祝福。',
     'item-card.image': 'https://i0.hdslb.com/bfs/garb/open/436cd3b761aaa29766c7fad8e44b4672f7734eef.png',
     'item-card.category': '透卡套组',
+    'item-card.state': '档案收录',
+    'item-card.gain': '以官方信息为准',
     'item-keychain.title': '羽毛信笺挂件',
     'item-keychain.date': '2026\n02',
     'item-keychain.desc': '以角色来信为概念的金属或亚克力挂件，将轻巧的书信意象收进随身收藏。',
     'item-keychain.image': 'https://i0.hdslb.com/bfs/garb/item/c6836114214dcba20fcc30167be8239863b9083e.png',
     'item-keychain.category': '钥匙扣／挂件',
+    'item-keychain.state': '档案收录',
+    'item-keychain.gain': '以官方信息为准',
     'item-color-paper.title': '生日纪念色纸',
     'item-color-paper.date': '2026\n04',
     'item-color-paper.desc': '用于记录一年一次的祝福时刻，将明亮的生日主题留在可被珍藏的纸面上。',
     'item-color-paper.image': 'https://i0.hdslb.com/bfs/garb/open/436cd3b761aaa29766c7fad8e44b4672f7734eef.png',
     'item-color-paper.category': '纪念色纸',
+    'item-color-paper.state': '档案收录',
+    'item-color-paper.gain': '以官方信息为准',
     'item-summer.title': '夏日集会立牌',
     'item-summer.date': '2026\n06',
     'item-summer.desc': '以夏日主题收束这段时间线，作为历年物品与再售讯息的长期档案入口。',
     'item-summer.image': 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
-    'item-summer.category': '亚克力立牌'
+    'item-summer.category': '亚克力立牌',
+    'item-summer.state': '档案收录',
+    'item-summer.gain': '以官方信息为准'
   }
 };
 
@@ -140,7 +162,7 @@ async function loadData() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const parsed = await res.json();
     apiState = 'ready';
-    return deepMerge(nestedDefaults, parsed && typeof parsed === 'object' ? parsed : {});
+    return deepMerge(nestedDefaults, normalizeMerchMeta(parsed && typeof parsed === 'object' ? parsed : {}));
   } catch (e) {
     apiState = 'offline';
     throw e;
@@ -1175,27 +1197,30 @@ const collections = {
     confirmWord: '物品',
     fields: [
       { key: 'title', label: '物品名称', kind: 'text', half: true },
+      // 状态信息：可新增下拉（选项来自其它物品正在用的状态）。展示页弹窗的
+      // 「状态：…」一行读这里；旧数据 meta 里的「状态：」前缀由
+      // normalizeMerchMeta 在读入时迁移过来。
+      { key: 'status', label: '状态信息', kind: 'choice', choice: 'merch-status', half: true },
+      { key: 'spec', label: '规格信息', kind: 'text', half: true },
       { key: 'meta', label: '编号/类型', kind: 'parts',
         parts: [
-          { label: '状态', choice: 'merch-meta-state' },
           { label: '品类', choice: 'merch-meta-kind' },
-          { label: '售价', choice: 'merch-meta-price' },
-          { label: '获得方式', choice: 'merch-meta-how' }
-        ],
-        hint: '首页卡片上那行小字，按「<code>状态：品类／售价／获得方式</code>」拼出来。四段都能直接选，选项就是其它物品正在用的值；下拉的最后一项「＋ 新增…」可以现场加一个。<strong>留空的尾段会被省略</strong>，所以只填前两段也不会拼出多余的斜杠。' },
+          { label: '获得方式', choice: 'merch-meta-how' },
+          { label: '售价', choice: 'merch-meta-price' }
+        ] },
       { key: 'type', label: '展厅分类', kind: 'select',
-        hint: '决定首页筛选归类，以及卡片序号后缀（GIFT / PLAN）。<strong>这一项只有这两个值，不能自行新增</strong>：首页的筛选按钮和后缀映射是写死在展示页里的，第三个分类首页认不出来，会被当成「舰长礼物」处理。要加分类得连首页一起改。',
         options: [['gift', '舰长礼物'], ['sale', '收藏企划']] },
       { key: 'note', label: '卡片简介', kind: 'textarea', grow: true },
-      { key: 'image', label: '图片链接', kind: 'text', preview: true,
-        hint: '点「选择图片」从已上传的图片里挑，弹窗底部也能填任意外部图片直链；「上传图片」直接传新文件。' }
+      { key: 'image', label: '图片链接', kind: 'text', preview: true }
     ],
     blank: (n) => ({
       title: '新物品 ' + pad2(n),
-      meta: '企划中：周边／信息更新中／以官方信息为准',
+      status: '企划中',
+      meta: '周边／以官方信息为准／信息更新中',
       note: '记录这件物品的画面来源、材质与收藏故事。',
       image: 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
-      type: 'gift'
+      type: 'gift',
+      spec: '以官方信息为准'
     })
   },
   archive: {
@@ -1210,16 +1235,19 @@ const collections = {
       { key: 'date', label: '日期', kind: 'year-month', half: true },
       { key: 'category', label: '类别', kind: 'choice', choice: 'archive-category',
         hint: '选项就是其它条目正在用的类别；下拉的最后一项「＋ 新增类别」可以现场加一个，加完会立刻用在本条目上，并出现在其它条目的下拉里。<strong>没有任何条目在用的类别会自动从下拉里消失。</strong>同时用于列表的「类别：…」与表格视图的标签。' },
+      { key: 'state', label: '资料状态', kind: 'text', half: true },
+      { key: 'gain', label: '获得方式', kind: 'text', half: true },
       { key: 'desc', label: '简介', kind: 'textarea', grow: true },
-      { key: 'image', label: '图片链接', kind: 'text', preview: true,
-        hint: '点「选择图片」从已上传的图片里挑，弹窗底部也能填任意外部图片直链；「上传图片」直接传新文件。' }
+      { key: 'image', label: '图片链接', kind: 'text', preview: true }
     ],
     blank: (n) => ({
       title: '新条目 ' + pad2(n),
       date: new Date().getFullYear() + '\n' + pad2(new Date().getMonth() + 1),
       desc: '记录这件历史物品的设计概念、材质规格、获得方式与相关资料。',
       image: 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
-      category: '未分类'
+      category: '未分类',
+      state: '档案收录',
+      gain: '以官方信息为准'
     })
   }
 };
@@ -1289,7 +1317,8 @@ function readYm(sel) {
   return (y ? y.value : '') + '\n' + (m ? m.value : '');
 }
 
-// ── 「编号/类型」的拆解：形如「状态：品类／售价／获得方式」 ──
+// ── 「编号/类型」的拆解：形如「品类／售价／获得方式」 ──
+// 状态已独立成字段（见下方 normalizeMerchMeta 的旧数据迁移）。
 // 拆和拼必须是无损的往返，否则用户一动下拉就会悄悄改坏原来的字符串。
 // 两个保护：多出来的段全部并进最后一段（不丢字），结尾的空段拼回去时去掉
 // （这样没有分隔符的自由文本不会被补成「随便写的／／」）。
@@ -1297,12 +1326,8 @@ const META_SEP = '／';
 const META_COLON = '：';
 
 function metaParts(value) {
-  const raw = String(value == null ? '' : value);
-  const at = raw.indexOf(META_COLON);
-  const state = at >= 0 ? raw.slice(0, at).trim() : '';
-  const bits = (at >= 0 ? raw.slice(at + 1) : raw).split(META_SEP);
+  const bits = String(value == null ? '' : value).split(META_SEP);
   return [
-    state,
     (bits[0] || '').trim(),
     (bits[1] || '').trim(),
     bits.slice(2).join(META_SEP).trim()
@@ -1310,10 +1335,37 @@ function metaParts(value) {
 }
 
 function joinMeta(parts) {
-  const tail = [parts[1] || '', parts[2] || '', parts[3] || ''];
+  const tail = [parts[0] || '', parts[1] || '', parts[2] || ''];
   while (tail.length && !tail[tail.length - 1]) tail.pop();
-  const body = tail.join(META_SEP);
-  return parts[0] ? parts[0] + META_COLON + body : body;
+  return tail.join(META_SEP);
+}
+
+/* 旧数据迁移分两步：
+ * 1) 状态独立成字段之前，meta 是「状态：品类／售价／获得方式」：把冒号前
+ *    那段挪给 status；已单独填过 status 的不覆盖。
+ * 2) 本次把「获得方式」提到「售价」之前：旧顺序「品类／售价／获得方式」
+ *    转成「品类／获得方式／售价」。home.merchMetaOrder 是幂等标记，防止下次
+ *    读取时再交换一次。纯内存操作，随下一次保存落库；展示页也根据此标记兼容旧数据。 */
+function normalizeMerchMeta(content) {
+  const home = content && content.home;
+  if (!home || typeof home !== 'object') return content;
+  const isTargetOrder = home.merchMetaOrder === 'kind-how-price';
+  for (const id of Object.keys(home)) {
+    const item = home[id];
+    if (!item || typeof item !== 'object' || typeof item.meta !== 'string') continue;
+    const at = item.meta.indexOf(META_COLON);
+    if (at >= 0) {
+      const state = item.meta.slice(0, at).trim();
+      item.meta = item.meta.slice(at + 1).trim();
+      if (state && !String(item.status || '').trim()) item.status = state;
+    }
+    if (!isTargetOrder) {
+      const parts = metaParts(item.meta);
+      item.meta = joinMeta([parts[0], parts[2], parts[1]]);
+    }
+  }
+  home.merchMetaOrder = 'kind-how-price';
+  return content;
 }
 
 // ── 可增选项的下拉：选项表不单独存，完全从「有哪些条目正在用这个值」推导 ──
@@ -1336,10 +1388,9 @@ function collectChoiceValues(source, section, orderKey, key, derive) {
   }));
 }
 
-// meta 四段各自一个选项组，段值靠 derive 从整串里抽出来
-// placeholder 要短：分段下拉那一列只有约 170px，减掉左边「＋」的位置和右内边距
-// 只剩 120 出头，写成「输入新的状态，例如…」必然被截断成省略号，比没有提示更难看。
-// 举例挪到 example，和操作提示一起挂在 title 上，鼠标停一下就能看到。
+// meta 三段各自一个选项组，段值靠 derive 从整串里抽出来；状态是独立字段，
+// 直接取 item.status，不需要 derive。
+// placeholder 要短：分段下拉那一列只有约 170px，举例挪到 example 挂在 title 上。
 const choiceGroups = {
   'archive-category': {
     section: 'archive',
@@ -1349,19 +1400,25 @@ const choiceGroups = {
     placeholder: '新的类别名称',
     example: '例如「亚克力挂件」'
   },
-  'merch-meta-state': {
-    section: 'home', orderKey: 'merchOrder', key: 'meta',
-    derive: (v) => metaParts(v)[0],
+  'merch-status': {
+    section: 'home', orderKey: 'merchOrder', key: 'status',
     addLabel: '新增状态',
     placeholder: '新的状态',
     example: '例如「已开售」'
   },
   'merch-meta-kind': {
     section: 'home', orderKey: 'merchOrder', key: 'meta',
-    derive: (v) => metaParts(v)[1],
+    derive: (v) => metaParts(v)[0],
     addLabel: '新增品类',
     placeholder: '新的品类',
     example: '例如「金属徽章」'
+  },
+  'merch-meta-how': {
+    section: 'home', orderKey: 'merchOrder', key: 'meta',
+    derive: (v) => metaParts(v)[1],
+    addLabel: '新增方式',
+    placeholder: '新的获得方式',
+    example: '例如「线下会场限定」'
   },
   'merch-meta-price': {
     section: 'home', orderKey: 'merchOrder', key: 'meta',
@@ -1369,13 +1426,6 @@ const choiceGroups = {
     addLabel: '新增售价',
     placeholder: '新的售价',
     example: '例如「¥68」'
-  },
-  'merch-meta-how': {
-    section: 'home', orderKey: 'merchOrder', key: 'meta',
-    derive: (v) => metaParts(v)[3],
-    addLabel: '新增方式',
-    placeholder: '新的获得方式',
-    example: '例如「线下会场限定」'
   }
 };
 
@@ -1521,7 +1571,7 @@ function buildChoiceControl(field, path) {
   return decorateSelect(sel, choiceGroups[field.choice]);
 }
 
-// 把四个可增选项下拉拼成一个字段：每个下拉带 data-part=段序号，
+// 把几个可增选项下拉拼成一个字段：每个下拉带 data-part=段序号，
 // 写回时由 readParts 读齐同一组的所有段再拼成完整字符串（和 year-month 同一套思路）。
 function buildPartsControl(field, path) {
   const wrap = document.createElement('div');
@@ -1542,19 +1592,20 @@ function buildPartsControl(field, path) {
 
 function readParts(sel) {
   const wrap = sel.closest('.field-parts');
-  const parts = ['', '', '', ''];
+  const parts = ['', '', ''];
   (wrap ? [...wrap.querySelectorAll('select[data-part]')] : [sel]).forEach((s) => {
     parts[Number(s.dataset.part)] = s.value;
   });
   return joinMeta(parts);
 }
 
-// 新选项里混进分隔符会让重拼后的字符串多出一段，下次读回来就整体错位。
-// 分隔符只在 join 时由代码写入，段内容里一律不允许出现。
+// 新选项里混进分隔符会让重拼后的字符串多出一段，下次读回来就整体错位；
+// 冒号是旧版「状态：」前缀的专用分隔符（normalizeMerchMeta 靠它识别旧数据），
+// 段内容里出现会破坏迁移。两个都只在 join 时由代码写入，段内容一律不许有。
 function partInputError(sel, value) {
   if (sel.dataset.part == null) return '';
   if (value.indexOf(META_SEP) >= 0) return '这一段不能含「' + META_SEP + '」，它是各段之间的分隔符';
-  if (sel.dataset.part === '0' && value.indexOf(META_COLON) >= 0) return '「状态」不能含「' + META_COLON + '」';
+  if (value.indexOf(META_COLON) >= 0) return '这一段不能含「' + META_COLON + '」';
   return '';
 }
 
@@ -1692,9 +1743,6 @@ function buildItemBlock(name, id, index, total) {
   nameEl.className = 'item-block-name';
   nameEl.dataset.itemTitle = '';
   nameEl.textContent = pad2(index + 1) + ' · ' + (resolveKey(cfg.section + '.' + id + '.title') || '未命名');
-  const keyEl = document.createElement('span');
-  keyEl.className = 'item-block-key';
-  keyEl.textContent = id;
   const actions = document.createElement('div');
   actions.className = 'item-actions';
   actions.innerHTML =
@@ -1703,7 +1751,7 @@ function buildItemBlock(name, id, index, total) {
     '<button class="btn btn-sm btn-danger" type="button" data-item-remove="1">删除</button>';
   actions.querySelector('[data-item-move="up"]').disabled = index === 0;
   actions.querySelector('[data-item-move="down"]').disabled = index === total - 1;
-  head.append(nameEl, keyEl, actions);
+  head.append(nameEl, actions);
 
   const group = document.createElement('div');
   group.className = 'field-group';
@@ -1718,10 +1766,7 @@ function buildItemBlock(name, id, index, total) {
     card.className = 'field-card' + (field.half ? '' : ' full') + (field.grow ? ' grow-fill' : '');
     const label = document.createElement('label');
     label.className = 'field-label';
-    label.append(document.createTextNode(field.label + ' '));
-    const code = document.createElement('code');
-    code.textContent = id + '.' + field.key;
-    label.appendChild(code);
+    label.textContent = field.label;
     card.appendChild(label);
     if (field.hint) {
       const hint = document.createElement('p');
@@ -2101,7 +2146,7 @@ document.getElementById('import-apply').addEventListener('click', () => {
 
   // 必须用**合并结果**算差集，不能用 parsed：备份里缺的字段会回落到默认值
   // （默认全是外链），那同样意味着原来那张上传图失去引用。用 parsed 会少算一批。
-  const next = deepMerge(nestedDefaults, parsed);
+  const next = deepMerge(nestedDefaults, normalizeMerchMeta(parsed));
   const before = collectBlobKeys(data);
   const after = collectBlobKeys(next);
   const dropped = [...before].filter((k) => !after.has(k));
