@@ -1939,6 +1939,109 @@ function renderAllItemLists() {
   Object.keys(collections).forEach(renderItemList);
 }
 
+const adminSearchState = { section: 'home', query: '' };
+const adminSearchInput = document.getElementById('admin-item-search-input');
+const adminSearchResults = document.getElementById('admin-item-search-results');
+const adminSearchWrap = document.querySelector('[data-od-id="admin-item-search"]');
+const normalizeAdminSearchText = (value) => String(value == null ? '' : value).toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+
+function getAdminSearchCollection() {
+  return adminSearchState.section === 'archive' ? 'archive' : 'merch';
+}
+
+function matchesAdminItemSearch(name, id, query) {
+  if (!query) return true;
+  const cfg = collections[name];
+  const item = (data[cfg.section] && data[cfg.section][id]) || {};
+  const values = name === 'merch'
+    ? [item.title, metaParts(item.meta)[0], item.status, metaParts(item.meta)[1]]
+    : [item.title, item.category, item.state, item.gain];
+  return values.some((value) => normalizeAdminSearchText(value).includes(query));
+}
+
+function closeAdminSearchResults() {
+  if (adminSearchResults) adminSearchResults.hidden = true;
+  if (adminSearchInput) adminSearchInput.setAttribute('aria-expanded', 'false');
+}
+
+function renderAdminSearchResults() {
+  if (!adminSearchInput || !adminSearchResults) return;
+  const query = adminSearchState.query;
+  if (!query || adminSearchState.section === 'data') { closeAdminSearchResults(); return; }
+  const name = getAdminSearchCollection();
+  const cfg = collections[name];
+  const matched = getOrder(name).filter((id) => matchesAdminItemSearch(name, id, query));
+  adminSearchResults.textContent = '';
+  if (!matched.length) {
+    const empty = document.createElement('p');
+    empty.className = 'admin-search-empty';
+    empty.textContent = '未找到匹配的物品';
+    adminSearchResults.appendChild(empty);
+  } else {
+    matched.slice(0, 8).forEach((id) => {
+      const item = data[cfg.section][id] || {};
+      const meta = name === 'merch' ? metaParts(item.meta) : [];
+      const type = name === 'merch' ? (item.type === 'sale' ? '收藏企划' : '舰长礼物') : (item.category || '未分类');
+      const status = name === 'merch' ? (item.status || '未填写') : (item.state || '未填写');
+      const gain = name === 'merch' ? (meta[1] || '未填写') : (item.gain || '未填写');
+      const result = document.createElement('button');
+      result.type = 'button';
+      result.className = 'admin-search-result';
+      result.setAttribute('role', 'option');
+      result.setAttribute('aria-label', '编辑' + (item.title || '未命名物品'));
+      result.innerHTML = '<strong></strong><span></span>';
+      result.querySelector('strong').textContent = item.title || '未命名物品';
+      result.querySelector('span').textContent = [type, status, gain].join(' · ');
+      result.addEventListener('click', () => revealAdminSearchResult(name, id));
+      adminSearchResults.appendChild(result);
+    });
+    if (matched.length > 8) {
+      const summary = document.createElement('p');
+      summary.className = 'admin-search-summary';
+      summary.textContent = '找到 ' + matched.length + ' 件匹配物品';
+      adminSearchResults.appendChild(summary);
+    }
+  }
+  adminSearchResults.hidden = false;
+  adminSearchInput.setAttribute('aria-expanded', 'true');
+}
+
+function revealAdminSearchResult(name, id) {
+  const section = name === 'merch' ? 'home' : 'archive';
+  const navButton = document.querySelector('.admin-nav [data-section="' + section + '"]');
+  if (navButton) navButton.click();
+  listPage[name] = listPageOf(getOrder(name).indexOf(id));
+  renderItemList(name, { revealId: id });
+  const block = document.querySelector('[data-item-block="' + name + '"][data-item-id="' + id + '"]');
+  const title = block && block.querySelector('[data-field$=".title"]');
+  if (title) title.focus();
+  if (adminSearchInput) adminSearchInput.value = '';
+  adminSearchState.query = '';
+  closeAdminSearchResults();
+}
+
+if (adminSearchInput) {
+  adminSearchInput.addEventListener('input', () => {
+    adminSearchState.query = normalizeAdminSearchText(adminSearchInput.value);
+    renderAdminSearchResults();
+  });
+  adminSearchInput.addEventListener('focus', () => {
+    // 点击面板外的控件会收起结果；带着关键词点回输入框时应重新展开
+    if (adminSearchState.query && adminSearchState.section !== 'data') renderAdminSearchResults();
+  });
+  adminSearchInput.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    adminSearchInput.value = '';
+    adminSearchState.query = '';
+    closeAdminSearchResults();
+  });
+}
+document.addEventListener('pointerdown', (event) => {
+  const search = event.target.closest ? event.target.closest('[data-od-id="admin-item-search"]') : null;
+  if (!search) closeAdminSearchResults();
+});
+
 // 输入标题时同步块头文字，省去重新渲染
 function syncBlockTitle(input) {
   if (!input.dataset.field.endsWith('.title')) return;
@@ -2091,6 +2194,11 @@ const sections = {
 navButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
     const target = btn.dataset.section;
+    adminSearchState.section = target;
+    adminSearchState.query = '';
+    if (adminSearchInput) adminSearchInput.value = '';
+    if (adminSearchWrap) adminSearchWrap.hidden = target === 'data';
+    closeAdminSearchResults();
     navButtons.forEach(b => b.classList.toggle('is-active', b === btn));
     Object.entries(sections).forEach(([key, s]) => s.el.classList.toggle('is-visible', key === target));
     document.getElementById('toolbar-heading').textContent = sections[target].title;
