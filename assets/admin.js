@@ -246,6 +246,8 @@ function hydrateForm(scope) {
       return;
     }
     input.value = value != null ? value : '';
+    // 固定选项也使用自绘下拉：回填直接赋值不会触发 input，必须同步按钮标签。
+    if (input.tagName === 'SELECT') syncDropdown(input);
     updatePreview(input);
     // 图片字段的输入框是隐藏的，当前值靠控制行里那枚 .image-value 显示。
     // 回填不走 input 事件，所以得在这里补一次同步，否则切页／导入后
