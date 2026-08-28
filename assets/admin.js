@@ -75,6 +75,7 @@ const defaults = {
     'item-star.category': '亚克力立牌',
     'item-star.state': '档案收录',
     'item-star.gain': '以官方信息为准',
+    'item-star.spec': '以官方信息为准',
     'item-badge.title': '云团徽章组',
     'item-badge.date': '2025\n11',
     'item-badge.desc': '以云朵、小鸟和表情切片组织的收藏徽章组，记录角色日常中的轻快片段。',
@@ -82,6 +83,7 @@ const defaults = {
     'item-badge.category': '马口铁徽章',
     'item-badge.state': '档案收录',
     'item-badge.gain': '以官方信息为准',
+    'item-badge.spec': '以官方信息为准',
     'item-card.title': '冬日天空透卡',
     'item-card.date': '2025\n12',
     'item-card.desc': '一组围绕节日问候设计的透明卡片，以轻盈的层叠画面收录冬日祝福。',
@@ -89,6 +91,7 @@ const defaults = {
     'item-card.category': '透卡套组',
     'item-card.state': '档案收录',
     'item-card.gain': '以官方信息为准',
+    'item-card.spec': '以官方信息为准',
     'item-keychain.title': '羽毛信笺挂件',
     'item-keychain.date': '2026\n02',
     'item-keychain.desc': '以角色来信为概念的金属或亚克力挂件，将轻巧的书信意象收进随身收藏。',
@@ -96,6 +99,7 @@ const defaults = {
     'item-keychain.category': '钥匙扣／挂件',
     'item-keychain.state': '档案收录',
     'item-keychain.gain': '以官方信息为准',
+    'item-keychain.spec': '以官方信息为准',
     'item-color-paper.title': '生日纪念色纸',
     'item-color-paper.date': '2026\n04',
     'item-color-paper.desc': '用于记录一年一次的祝福时刻，将明亮的生日主题留在可被珍藏的纸面上。',
@@ -103,13 +107,15 @@ const defaults = {
     'item-color-paper.category': '纪念色纸',
     'item-color-paper.state': '档案收录',
     'item-color-paper.gain': '以官方信息为准',
+    'item-color-paper.spec': '以官方信息为准',
     'item-summer.title': '夏日集会立牌',
     'item-summer.date': '2026\n06',
     'item-summer.desc': '以夏日主题收束这段时间线，作为历年物品与再售讯息的长期档案入口。',
     'item-summer.image': 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
     'item-summer.category': '亚克力立牌',
     'item-summer.state': '档案收录',
-    'item-summer.gain': '以官方信息为准'
+    'item-summer.gain': '以官方信息为准',
+    'item-summer.spec': '以官方信息为准'
   }
 };
 
@@ -1234,11 +1240,12 @@ const collections = {
     confirmWord: '条目',
     fields: [
       { key: 'title', label: '物品名称', kind: 'text', half: true },
-      { key: 'date', label: '日期', kind: 'year-month', half: true },
+      { key: 'date', label: '发布时间', kind: 'year-month', half: true },
       { key: 'category', label: '类别', kind: 'choice', choice: 'archive-category',
         hint: '选项就是其它条目正在用的类别；下拉的最后一项「＋ 新增类别」可以现场加一个，加完会立刻用在本条目上，并出现在其它条目的下拉里。<strong>没有任何条目在用的类别会自动从下拉里消失。</strong>同时用于列表的「类别：…」与表格视图的标签。' },
-      { key: 'state', label: '资料状态', kind: 'text', half: true },
-      { key: 'gain', label: '获得方式', kind: 'text', half: true },
+      { key: 'state', label: '物品状态', kind: 'choice', choice: 'archive-state', half: true },
+      { key: 'gain', label: '获得方式', kind: 'choice', choice: 'archive-gain', half: true },
+      { key: 'spec', label: '规格信息', kind: 'text', half: true },
       { key: 'desc', label: '简介', kind: 'textarea', grow: true },
       { key: 'image', label: '图片链接', kind: 'text', preview: true }
     ],
@@ -1249,7 +1256,8 @@ const collections = {
       image: 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png',
       category: '未分类',
       state: '档案收录',
-      gain: '以官方信息为准'
+      gain: '以官方信息为准',
+      spec: '以官方信息为准'
     })
   }
 };
@@ -1401,6 +1409,22 @@ const choiceGroups = {
     addLabel: '新增类别',
     placeholder: '新的类别名称',
     example: '例如「亚克力挂件」'
+  },
+  'archive-state': {
+    section: 'archive',
+    orderKey: 'itemOrder',
+    key: 'state',
+    addLabel: '新增物品状态',
+    placeholder: '新的物品状态',
+    example: '例如「已绝版」'
+  },
+  'archive-gain': {
+    section: 'archive',
+    orderKey: 'itemOrder',
+    key: 'gain',
+    addLabel: '新增获得方式',
+    placeholder: '新的获得方式',
+    example: '例如「官方店铺购买」'
   },
   'merch-status': {
     section: 'home', orderKey: 'merchOrder', key: 'status',
