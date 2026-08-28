@@ -74,6 +74,7 @@
     .grid-meta { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .04em; }
     .grid-copy h3 { margin: auto 0 0; font-family: var(--display); font-size: clamp(23px, 2.2vw, 33px); letter-spacing: -.055em; line-height: 1; }
     .grid-copy p { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .grid-spec { margin: 5px 0 0; color: var(--muted); font-family: var(--mono); font-size: 10px; line-height: 1.55; }
 
     .archive-list { border-top: 0; }
     .archive-item { display: grid; grid-template-columns: minmax(110px, .46fr) minmax(240px, 1fr) minmax(220px, .82fr); gap: clamp(20px, 3.5vw, 60px); min-height: 330px; padding: 20px 0; border-bottom: 1px solid var(--border); }
@@ -181,7 +182,7 @@
     <section id="archive-list" data-od-id="archive-list-section">
       <div class="gallery-head">
         <h2 data-od-id="archive-list-heading">历史物品<br>展厅</h2>
-        <p>每条档案均保留日期、物品类型与资料状态，并持续作为历年周边的索引入口，让旧物品不会从页面中消失。</p>
+        <p>每条档案均保留发布时间、物品类别与物品状态，并持续作为历年周边的索引入口，让旧物品不会从页面中消失。</p>
       </div>
 
       <div class="view-switcher" data-od-id="archive-view-switcher">
@@ -401,7 +402,7 @@
           card.dataset.odId = 'archive-grid-card-' + itemKey;
           card.innerHTML =
             '<div class="grid-image"><img src="https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png" alt="" loading="lazy"></div>' +
-            '<div class="grid-copy"><div class="grid-meta"><span></span><span></span></div><h3></h3><p></p></div>';
+            '<div class="grid-copy"><div class="grid-meta"><span></span><span></span></div><h3></h3><p></p><p class="grid-spec"></p></div>';
           return card;
         }
 
@@ -417,11 +418,12 @@
             const o = get(overrides, key) || {};
             const itemKey = String(key).replace(/^item-/, '');
             const status = 'ARCHIVE ' + pad2(index + 1);
-            // 「资料状态」「获得方式」来自后台字段；旧数据缺字段（或留空）时落到兜底值。
+            // 「物品状态」「获得方式」来自后台字段；旧数据缺字段（或留空）时落到兜底值。
             // 前者同时喂给列表状态行、表格角标和弹窗，后者喂给列表 meta 和弹窗。
             const trimVal = (v) => (v == null ? '' : String(v).trim());
             const stateVal = trimVal(o.state) || '档案收录';
             const gainVal = trimVal(o.gain) || '以官方信息为准';
+            const specVal = trimVal(o.spec) || '以官方信息为准';
 
             let listItem = existingList.get(itemKey);
             const listIsNew = !listItem;
@@ -437,7 +439,7 @@
 
             // ── 列表视图 ──
             const statusEl = listItem.querySelector('.archive-status');
-            if (statusEl) statusEl.textContent = status + ' / ' + stateVal;
+            if (statusEl) statusEl.textContent = status + ' / 物品状态：' + stateVal;
             if (o.title != null) { const h = listItem.querySelector('h3'); if (h) h.textContent = o.title; }
             if (o.date != null && typeof o.date === 'string') {
               const d = listItem.querySelector('.archive-date');
@@ -462,6 +464,8 @@
                 listMeta.appendChild(document.createElement('br'));
               }
               listMeta.appendChild(document.createTextNode('获得方式：' + gainVal));
+              listMeta.appendChild(document.createElement('br'));
+              listMeta.appendChild(document.createTextNode('规格：' + specVal));
             }
             const listImg = listItem.querySelector('.archive-image img');
             if (listImg) {
@@ -479,7 +483,9 @@
               gridCard.setAttribute('aria-label', '查看' + o.title + '物品说明');
             }
             const gridNote = gridCard.querySelector('.grid-copy > p');
-            if (gridNote) gridNote.textContent = status + ' ／ ' + stateVal;
+            if (gridNote) gridNote.textContent = '物品状态：' + stateVal;
+            const gridSpec = gridCard.querySelector('.grid-spec');
+            if (gridSpec) gridSpec.textContent = '规格：' + specVal;
             const gridImg = gridCard.querySelector('.grid-image img');
             if (gridImg) {
               if (o.image) gridImg.src = o.image;
@@ -490,12 +496,12 @@
             const entry = archiveDetails[itemKey] || (archiveDetails[itemKey] = {
               number: '', title: '', image: 'https://i0.hdslb.com/bfs/garb/open/c2bb646b6369aad51a004d673e3287e912d7756a.png', alt: '', description: '', details: ''
             });
-            entry.number = status + ' / ' + dateToDot(o.date != null ? o.date : '');
+            entry.number = status + ' / 发布时间：' + dateToDot(o.date != null ? o.date : '');
             if (o.title != null) { entry.title = o.title; if (gridIsNew) entry.alt = o.title + '图片'; }
             if (o.desc != null) entry.description = o.desc;
             if (o.image) entry.image = o.image;
             const cat = o.category != null ? String(o.category) : '';
-            entry.details = '类别：' + esc(cat) + '<br>资料状态：' + esc(stateVal) + '<br>获得方式：' + esc(gainVal);
+            entry.details = '类别：' + esc(cat) + '<br>物品状态：' + esc(stateVal) + '<br>获得方式：' + esc(gainVal) + '<br>规格信息：' + esc(specVal);
 
             keptList.push(listItem);
             keptGrid.push(gridCard);
