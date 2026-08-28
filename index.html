@@ -84,7 +84,7 @@
     }
     .primary-action:hover { transform: translateY(-2px); background: oklch(0.45 0.12 257); color: var(--bg); }
     .primary-action:active { transform: translateY(0); }
-    .primary-action:focus-visible, .filter-button:focus-visible, .pager-button:focus-visible, .detail-link:focus-visible, .close-button:focus-visible, .header-nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+    .primary-action:focus-visible, .filter-button:focus-visible, .pager-button:focus-visible, .detail-link:focus-visible, .close-button:focus-visible, .header-nav a:focus-visible, .item-search-input:focus-visible, .search-result:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 
     .hero-image-wrap {
       align-self: center;
@@ -146,6 +146,18 @@
     .filter-button { min-height: 36px; border: 1px solid transparent; background: transparent; padding: 0 10px; cursor: pointer; font-size: 12px; transition: border-color .25s var(--ease), background .25s var(--ease); }
     .filter-button:hover { border-color: var(--border); background: var(--surface); }
     .filter-button.is-active { border-color: var(--fg); }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .item-search { position: relative; margin-left: auto; width: min(100%, 330px); }
+    .item-search-input { width: 100%; min-height: 36px; border: 1px solid var(--border); background: var(--bg); padding: 0 11px; color: var(--fg); font-size: 12px; transition: border-color .25s var(--ease), background .25s var(--ease); }
+    .item-search-input:hover { border-color: var(--fg); background: var(--surface); }
+    .search-results { position: absolute; z-index: 12; top: calc(100% + 6px); left: 0; right: 0; max-height: 352px; overflow-y: auto; border: 1px solid var(--border); background: var(--bg); box-shadow: 0 12px 30px oklch(0.28 0 0 / .12); }
+    .search-results[hidden] { display: none; }
+    .search-result { width: 100%; border: 0; border-bottom: 1px solid var(--border); background: var(--bg); padding: 10px 12px; color: var(--fg); cursor: pointer; text-align: left; transition: background .2s var(--ease); }
+    .search-result:last-child { border-bottom: 0; }
+    .search-result:hover { background: var(--surface); }
+    .search-result-title { display: block; font-size: 13px; font-weight: 600; }
+    .search-result-meta, .search-summary, .search-empty { display: block; margin-top: 4px; color: var(--muted); font-family: var(--mono); font-size: 10px; line-height: 1.5; }
+    .search-summary, .search-empty { padding: 10px 12px; margin: 0; }
 
     .collection-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-left: 1px solid var(--border); }
     .merch-card {
@@ -258,6 +270,8 @@
       .subnav-right { text-align: left; }
       .filters { flex-wrap: wrap; }
       .filter-label { width: 100%; }
+      .item-search { width: 100%; margin-left: 0; }
+      .item-search-input { min-height: 44px; }
       /* 手机上抬到 44px：桌面沿用 36px 是为了和筛选行齐平，但触摸目标不能凑合 */
       .collection-pager { justify-content: flex-start; }
       .pager-button { min-height: 44px; min-width: 44px; }
@@ -314,6 +328,11 @@
         <button class="filter-button is-active" type="button" data-filter="all" aria-pressed="true" data-od-id="filter-all">全部</button>
         <button class="filter-button" type="button" data-filter="gift" aria-pressed="false" data-od-id="filter-gift">舰长礼物</button>
         <button class="filter-button" type="button" data-filter="sale" aria-pressed="false" data-od-id="filter-sale">收藏企划</button>
+        <div class="item-search" data-od-id="collection-search">
+<label class="sr-only" for="collection-search-input">搜索本期展厅物品</label>
+<input class="item-search-input" id="collection-search-input" type="search" autocomplete="off" placeholder="搜索物品名称、类别、状态或获得方式" aria-controls="collection-search-results" aria-expanded="false">
+<div class="search-results" id="collection-search-results" role="region" aria-label="搜索结果" aria-live="polite" data-od-id="collection-search-results" hidden></div>
+        </div>
       </div>
 
       <div class="collection-grid" data-od-id="merch-grid"></div>
@@ -362,6 +381,7 @@
     </div>
   </dialog>
 
+  <script src="sample-content.js"></script>
   <script>
     const merchandise = {};
 
@@ -428,10 +448,72 @@
     const pad2 = (n) => String(n).padStart(2, '0');
     let activeFilter = 'all';
     let currentPage = 1;
+    let activeSearchQuery = '';
+    const searchInput = document.querySelector('#collection-search-input');
+    const searchResults = document.querySelector('#collection-search-results');
+    const normalizeSearchText = (value) => String(value == null ? '' : value).toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+
+    function matchesMerchSearch(card, query) {
+      if (!query) return true;
+      return [card.dataset.searchTitle, card.dataset.searchCategory, card.dataset.searchStatus, card.dataset.searchGain]
+        .some((value) => normalizeSearchText(value).includes(query));
+    }
+
+    function closeCollectionSearchResults() {
+      if (searchResults) searchResults.hidden = true;
+      if (searchInput) searchInput.setAttribute('aria-expanded', 'false');
+    }
+
+    function renderCollectionSearchResults() {
+      if (!searchResults || !searchInput) return;
+      const query = activeSearchQuery;
+      if (!query) { closeCollectionSearchResults(); return; }
+      const matched = Array.from(document.querySelectorAll('.merch-card')).filter((card) =>
+        (activeFilter === 'all' || card.dataset.type === activeFilter) && matchesMerchSearch(card, query)
+      );
+      searchResults.textContent = '';
+      if (!matched.length) {
+        const empty = document.createElement('p');
+        empty.className = 'search-empty';
+        empty.textContent = '未找到匹配的物品';
+        searchResults.appendChild(empty);
+      } else {
+        matched.slice(0, 8).forEach((card) => {
+          const itemKey = card.dataset.item;
+          const result = document.createElement('button');
+          result.type = 'button';
+          result.className = 'search-result';
+          result.setAttribute('role', 'option');
+          result.setAttribute('aria-label', '查看' + (card.dataset.searchTitle || '物品') + '完整信息');
+          result.innerHTML = '<span class="search-result-title"></span><span class="search-result-meta"></span>';
+          result.querySelector('.search-result-title').textContent = card.dataset.searchTitle || '未命名物品';
+          result.querySelector('.search-result-meta').textContent = [card.dataset.searchType, card.dataset.searchStatus, card.dataset.searchGain].filter(Boolean).join(' · ');
+          result.addEventListener('click', () => {
+            openDetails(itemKey);
+            searchInput.value = '';
+            activeSearchQuery = '';
+            currentPage = 1;
+            renderCollection({ instant: true });
+            closeCollectionSearchResults();
+          });
+          searchResults.appendChild(result);
+        });
+        if (matched.length > 8) {
+          const summary = document.createElement('p');
+          summary.className = 'search-summary';
+          summary.textContent = '找到 ' + matched.length + ' 件匹配物品';
+          searchResults.appendChild(summary);
+        }
+      }
+      searchResults.hidden = false;
+      searchInput.setAttribute('aria-expanded', 'true');
+    }
 
     function renderCollection({ instant = false } = {}) {
       const cards = Array.from(document.querySelectorAll('.merch-card'));
-      const matched = cards.filter((card) => activeFilter === 'all' || card.dataset.type === activeFilter);
+      const matched = cards.filter((card) =>
+        (activeFilter === 'all' || card.dataset.type === activeFilter) && matchesMerchSearch(card, activeSearchQuery)
+      );
       const totalPages = Math.max(1, Math.ceil(matched.length / PAGE_SIZE));
       // 后台删物品、或切到物品更少的筛选，都可能让当前页码越界
       currentPage = Math.min(Math.max(currentPage, 1), totalPages);
@@ -511,6 +593,32 @@
       });
     }
 
+    if (searchInput) {
+      searchInput.addEventListener('input', () => {
+        activeSearchQuery = normalizeSearchText(searchInput.value);
+        currentPage = 1;
+        renderCollection({ instant: true });
+        renderCollectionSearchResults();
+      });
+      searchInput.addEventListener('focus', () => {
+        // 点击面板外的控件（筛选按钮等）会收起结果；带着关键词点回输入框时应重新展开
+        if (activeSearchQuery) renderCollectionSearchResults();
+      });
+      searchInput.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        searchInput.value = '';
+        activeSearchQuery = '';
+        currentPage = 1;
+        renderCollection({ instant: true });
+        closeCollectionSearchResults();
+      });
+    }
+    document.addEventListener('pointerdown', (event) => {
+      const search = event.target.closest ? event.target.closest('[data-od-id="collection-search"]') : null;
+      if (!search) closeCollectionSearchResults();
+    });
+
     document.querySelectorAll('.filter-button').forEach((button) => {
       button.addEventListener('click', () => {
         const filter = button.dataset.filter;
@@ -522,6 +630,7 @@
         activeFilter = filter;
         currentPage = 1;   // 换筛选后停在第 3 页是没有意义的
         renderCollection({ instant: true });
+        renderCollectionSearchResults();
       });
     });
 
@@ -551,12 +660,15 @@
 
     // 站点内容由 admin.html 编辑，存放在 EdgeOne KV，经 /api/content 读取；公开物品
     // 只在拿到后台配置后创建。
+    // 本地调试用示例单独放在 sample-content.js（window.SAMPLE_CONTENT）：接口请求
+    // 失败（本地没有函数运行时）时用它把页面填起来。线上部署 /api/content 恒为
+    // 200（KV 为空也返回 {}），轮不到示例，所以不用按主机名猜测是不是本地。
     async function fetchSiteContent() {
       try {
         const res = await fetch('/api/content', { cache: 'no-store' });
         if (res.ok) return await res.json();
-      } catch (_) { /* 本地没有函数运行时，返回空内容 */ }
-      return null;
+      } catch (_) { /* 本地没有函数运行时，走示例配置回退 */ }
+      return window.SAMPLE_CONTENT || null;
     }
     (async function applySiteContent() {
       try {
@@ -692,6 +804,11 @@
               cardStatus.dataset.odId = 'status-' + itemKey;
             }
             const spec = (o.spec != null && String(o.spec).trim()) ? String(o.spec) : '以官方信息为准';
+            card.dataset.searchTitle = o.title != null ? String(o.title) : (card.querySelector('h3')?.textContent || '');
+            card.dataset.searchCategory = cardMetaParts[0] || '';
+            card.dataset.searchType = typeLabels[type] || '';
+            card.dataset.searchStatus = status;
+            card.dataset.searchGain = gain;
             entry.details = '获得方式：' + esc(gain) + '<br>状态：' + esc(status) + '<br>规格信息：' + esc(spec);
 
             if (isNew) {
@@ -710,8 +827,8 @@
           // 卡片数量刚变过，必须重算分页：后台加到 5 件，分页条就在这一刻出现。
           // 不传 instant——首屏第一页仍然走 IntersectionObserver 的入场动画。
           renderCollection();
+          renderCollectionSearchResults();
         }
-
 
         setText('captain-heading', get(overrides, 'captain-heading'));
       } catch (e) {

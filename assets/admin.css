@@ -125,6 +125,21 @@ a { color: inherit; text-decoration: none; }
 .toolbar-title p { margin: 0; font-size: 12px; color: var(--muted); font-family: var(--mono); letter-spacing: .04em; }
 
 .toolbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.admin-item-search { position: relative; width: min(330px, 100%); margin-left: auto; }
+.admin-item-search input { width: 100%; min-height: 38px; border: 1px solid var(--border); background: var(--bg); padding: 0 11px; color: var(--fg); font-size: 12px; transition: border-color .2s var(--ease), background .2s var(--ease); }
+.admin-item-search input:hover { border-color: var(--fg); background: var(--surface); }
+.admin-item-search input:focus-visible, .admin-search-result:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-color: var(--accent); }
+.admin-search-results { position: absolute; z-index: 20; top: calc(100% + 6px); left: 0; right: 0; max-height: 352px; overflow-y: auto; border: 1px solid var(--border); background: var(--bg); box-shadow: 0 12px 30px oklch(0.28 0 0 / .12); }
+.admin-search-results[hidden] { display: none; }
+.admin-search-result { width: 100%; border: 0; border-bottom: 1px solid var(--border); background: var(--bg); padding: 10px 12px; color: var(--fg); cursor: pointer; text-align: left; transition: background .2s var(--ease); }
+.admin-search-result:last-child { border-bottom: 0; }
+.admin-search-result:hover { background: var(--surface); }
+.admin-search-result strong, .admin-search-result span { display: block; }
+.admin-search-result strong { font-size: 13px; }
+.admin-search-result span, .admin-search-summary, .admin-search-empty { margin: 4px 0 0; color: var(--muted); font-family: var(--mono); font-size: 10px; line-height: 1.5; }
+.admin-search-summary, .admin-search-empty { padding: 10px 12px; margin: 0; }
+.admin-item-search[hidden] { display: none; }
 .btn {
   min-height: 38px;
   padding: 0 14px;
@@ -915,6 +930,9 @@ button.blob-tile:hover, button.blob-tile:focus-visible { border-color: var(--fg)
     border-bottom-color: var(--fg);
   }
   .admin-aside-foot { display: none; }
+  .admin-toolbar { flex-wrap: wrap; }
+  .admin-item-search { order: 3; width: 100%; margin-left: 0; }
+  .admin-item-search input { min-height: 44px; }
   .data-panel { grid-template-columns: 1fr; }
 }
 

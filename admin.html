@@ -30,6 +30,11 @@
           <h1 id="toolbar-heading">首页元素</h1>
           <p id="toolbar-sub">当前展厅页 · 实时预览</p>
         </div>
+        <div class="admin-item-search" data-od-id="admin-item-search">
+<label class="sr-only" for="admin-item-search-input">搜索当前内容分区的物品</label>
+<input id="admin-item-search-input" type="search" autocomplete="off" placeholder="搜索物品名称、类别、状态或获得方式" aria-controls="admin-item-search-results" aria-expanded="false">
+<div class="admin-search-results" id="admin-item-search-results" role="region" aria-label="搜索结果" aria-live="polite" data-od-id="admin-item-search-results" hidden></div>
+        </div>
         <div class="toolbar-actions">
           <span class="conn-badge is-offline" id="conn-badge">● 检测中</span>
           <button class="btn" type="button" id="logout">退出登录</button>

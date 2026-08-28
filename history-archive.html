@@ -53,6 +53,19 @@
     .gallery-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, .58fr); gap: 36px; padding: clamp(80px, 11vw, 150px) 0 42px; border-bottom: 1px solid var(--fg); }
     .gallery-head h2 { margin: 0; font-family: var(--display); font-size: clamp(42px, 6vw, 84px); letter-spacing: -.07em; line-height: .96; }
     .gallery-head p { align-self: end; max-width: 32em; margin: 0; color: var(--muted); font-size: 14px; line-height: 1.75; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .item-search { position: relative; width: min(100%, 390px); margin-left: auto; }
+    .item-search-input { width: 100%; min-height: 44px; border: 1px solid var(--border); background: var(--bg); padding: 0 12px; color: var(--fg); font: inherit; font-size: 12px; transition: border-color .25s var(--ease), background .25s var(--ease); }
+    .item-search-input:hover { border-color: var(--fg); background: var(--surface); }
+    .item-search-input:focus-visible, .search-result:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-color: var(--accent); }
+    .search-results { position: absolute; z-index: 12; top: calc(100% + 6px); left: 0; right: 0; max-height: 352px; overflow-y: auto; border: 1px solid var(--border); background: var(--bg); box-shadow: 0 12px 30px oklch(0.28 0 0 / .12); }
+    .search-results[hidden] { display: none; }
+    .search-result { width: 100%; border: 0; border-bottom: 1px solid var(--border); background: var(--bg); padding: 10px 12px; color: var(--fg); cursor: pointer; text-align: left; transition: background .2s var(--ease); }
+    .search-result:last-child { border-bottom: 0; }
+    .search-result:hover { background: var(--surface); }
+    .search-result-title { display: block; font-size: 13px; font-weight: 600; }
+    .search-result-meta, .search-summary, .search-empty { display: block; margin-top: 4px; color: var(--muted); font-family: var(--mono); font-size: 10px; line-height: 1.5; }
+    .search-summary, .search-empty { padding: 10px 12px; margin: 0; }
     .view-switcher { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 0; border-bottom: 1px solid var(--border); }
     .view-switcher > span { color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: .05em; }
     .view-controls { display: flex; gap: 6px; }
@@ -123,6 +136,8 @@
       .site-header { grid-template-columns: 1fr auto; }
       .header-meta { display: none; }
       .archive-hero, .gallery-head { grid-template-columns: 1fr; }
+      .view-switcher { flex-wrap: wrap; }
+      .item-search { width: 100%; margin-left: 0; }
       .archive-hero { min-height: auto; padding-top: 85px; }
       h1 { max-width: none; font-size: clamp(52px, 14vw, 84px); letter-spacing: -.09em; }
       .archive-index { max-width: 440px; }
@@ -191,6 +206,11 @@
           <button class="view-button is-active" type="button" data-view-target="list" aria-pressed="true" data-od-id="archive-list-view">列表</button>
           <button class="view-button" type="button" data-view-target="grid" aria-pressed="false" data-od-id="archive-grid-view">表格</button>
         </div>
+        <div class="item-search" data-od-id="archive-search">
+<label class="sr-only" for="archive-search-input">搜索历史展厅物品</label>
+<input class="item-search-input" id="archive-search-input" type="search" autocomplete="off" placeholder="搜索物品名称、类别、状态或获得方式" aria-controls="archive-search-results" aria-expanded="false">
+<div class="search-results" id="archive-search-results" role="region" aria-label="搜索结果" aria-live="polite" data-od-id="archive-search-results" hidden></div>
+        </div>
       </div>
 
       <div class="archive-view" data-view="list" data-od-id="archive-view">
@@ -229,6 +249,7 @@
     <span>鸽一品历史物品档案</span>
   </footer>
 
+  <script src="sample-content.js"></script>
   <script>
     const listItems = [...document.querySelectorAll('.archive-item')];
     const gridCards = [...document.querySelectorAll('[data-archive-grid-card]')];
@@ -250,24 +271,88 @@
     const closeDialog = document.querySelector('.close-button');
     const archiveDetails = {};
     let currentPage = 1;
+    let activeArchiveSearchQuery = '';
+    const archiveSearchInput = document.querySelector('#archive-search-input');
+    const archiveSearchResults = document.querySelector('#archive-search-results');
+    const normalizeArchiveSearchText = (value) => String(value == null ? '' : value).toLocaleLowerCase().replace(/\s+/g, ' ').trim();
+
+    function matchesArchiveSearch(item, query) {
+      if (!query) return true;
+      return [item.dataset.searchTitle, item.dataset.searchCategory, item.dataset.searchStatus, item.dataset.searchGain]
+        .some((value) => normalizeArchiveSearchText(value).includes(query));
+    }
+
+    function getMatchedArchiveItems() {
+      return listItems.filter((item) => matchesArchiveSearch(item, activeArchiveSearchQuery));
+    }
+
+    function closeArchiveSearchResults() {
+      if (archiveSearchResults) archiveSearchResults.hidden = true;
+      if (archiveSearchInput) archiveSearchInput.setAttribute('aria-expanded', 'false');
+    }
+
+    function renderArchiveSearchResults() {
+      if (!archiveSearchResults || !archiveSearchInput) return;
+      if (!activeArchiveSearchQuery) { closeArchiveSearchResults(); return; }
+      const matched = getMatchedArchiveItems();
+      archiveSearchResults.textContent = '';
+      if (!matched.length) {
+        const empty = document.createElement('p');
+        empty.className = 'search-empty';
+        empty.textContent = '未找到匹配的物品';
+        archiveSearchResults.appendChild(empty);
+      } else {
+        matched.slice(0, 8).forEach((item) => {
+          const itemKey = item.dataset.item;
+          const result = document.createElement('button');
+          result.type = 'button';
+          result.className = 'search-result';
+          result.setAttribute('role', 'option');
+          result.setAttribute('aria-label', '查看' + (item.dataset.searchTitle || '物品') + '完整信息');
+          result.innerHTML = '<span class="search-result-title"></span><span class="search-result-meta"></span>';
+          result.querySelector('.search-result-title').textContent = item.dataset.searchTitle || '未命名物品';
+          result.querySelector('.search-result-meta').textContent = [item.dataset.searchCategory, item.dataset.searchStatus, item.dataset.searchGain].filter(Boolean).join(' · ');
+          result.addEventListener('click', () => {
+            openDetails(itemKey);
+            archiveSearchInput.value = '';
+            activeArchiveSearchQuery = '';
+            renderPage(1, false);
+            closeArchiveSearchResults();
+          });
+          archiveSearchResults.appendChild(result);
+        });
+        if (matched.length > 8) {
+          const summary = document.createElement('p');
+          summary.className = 'search-summary';
+          summary.textContent = '找到 ' + matched.length + ' 件匹配物品';
+          archiveSearchResults.appendChild(summary);
+        }
+      }
+      archiveSearchResults.hidden = false;
+      archiveSearchInput.setAttribute('aria-expanded', 'true');
+    }
 
     function getActivePageSize() {
       return view.dataset.view === 'grid' ? gridPageSize : listPageSize;
     }
 
     function getTotalPages() {
-      return Math.max(1, Math.ceil(listItems.length / getActivePageSize()));
+      return Math.max(1, Math.ceil(getMatchedArchiveItems().length / getActivePageSize()));
     }
 
     function renderPage(page, shouldAnchor = true) {
+      const matched = getMatchedArchiveItems();
       const totalPages = getTotalPages();
       currentPage = Math.min(Math.max(page, 1), totalPages);
-      if (pagination) pagination.hidden = listItems.length <= getActivePageSize();
-      listItems.forEach((item, index) => { item.hidden = Math.floor(index / listPageSize) + 1 !== currentPage; });
-      gridCards.forEach((card, index) => { card.hidden = Math.floor(index / gridPageSize) + 1 !== currentPage; });
+      if (pagination) pagination.hidden = matched.length <= getActivePageSize();
+      const from = (currentPage - 1) * listPageSize;
+      const matchedOnPage = new Set(matched.slice(from, from + listPageSize));
+      const matchedKeys = new Set(matched.map((item) => item.dataset.item));
+      listItems.forEach((item) => { item.hidden = !matchedOnPage.has(item); });
+      gridCards.forEach((card) => { card.hidden = !matchedKeys.has(card.dataset.item) || !matchedOnPage.has(listItems.find((item) => item.dataset.item === card.dataset.item)); });
       previousButton.disabled = currentPage === 1;
       nextButton.disabled = currentPage === totalPages;
-      pageStatus.textContent = listItems.length ? `第 ${currentPage} 页，共 ${totalPages} 页` : '';
+      pageStatus.textContent = matched.length ? `第 ${currentPage} 页，共 ${totalPages} 页` : '未找到匹配的物品';
       if (shouldAnchor) window.location.hash = 'archive-list';
     }
 
@@ -313,6 +398,29 @@
     });
 
     viewButtons.forEach((button) => button.addEventListener('click', () => setView(button.dataset.viewTarget)));
+    if (archiveSearchInput) {
+      archiveSearchInput.addEventListener('input', () => {
+        activeArchiveSearchQuery = normalizeArchiveSearchText(archiveSearchInput.value);
+        renderPage(1, false);
+        renderArchiveSearchResults();
+      });
+      archiveSearchInput.addEventListener('focus', () => {
+        // 点击面板外的控件（视图切换等）会收起结果；带着关键词点回输入框时应重新展开
+        if (activeArchiveSearchQuery) renderArchiveSearchResults();
+      });
+      archiveSearchInput.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        archiveSearchInput.value = '';
+        activeArchiveSearchQuery = '';
+        renderPage(1, false);
+        closeArchiveSearchResults();
+      });
+    }
+    document.addEventListener('pointerdown', (event) => {
+      const search = event.target.closest ? event.target.closest('[data-od-id="archive-search"]') : null;
+      if (!search) closeArchiveSearchResults();
+    });
     previousButton.addEventListener('click', () => renderPage(currentPage - 1));
     nextButton.addEventListener('click', () => renderPage(currentPage + 1));
     renderPage(1, false);
@@ -326,12 +434,15 @@
 
     // 站点内容由 admin.html 编辑，存放在 EdgeOne KV，经 /api/content 读取；公开物品
     // 只在拿到后台配置后创建。
+    // 本地调试用示例单独放在 sample-content.js（window.SAMPLE_CONTENT）：接口请求
+    // 失败（本地没有函数运行时）时用它把页面填起来。线上部署 /api/content 恒为
+    // 200（KV 为空也返回 {}），轮不到示例，所以不用按主机名猜测是不是本地。
     async function fetchSiteContent() {
       try {
         const res = await fetch('/api/content', { cache: 'no-store' });
         if (res.ok) return await res.json();
-      } catch (_) { /* 本地没有函数运行时，返回空内容 */ }
-      return null;
+      } catch (_) { /* 本地没有函数运行时，走示例配置回退 */ }
+      return window.SAMPLE_CONTENT || null;
     }
     (async function applySiteContent() {
       try {
@@ -502,6 +613,12 @@
             if (o.image) entry.image = o.image;
             const cat = o.category != null ? String(o.category) : '';
             entry.details = '类别：' + esc(cat) + '<br>物品状态：' + esc(stateVal) + '<br>获得方式：' + esc(gainVal) + '<br>规格信息：' + esc(specVal);
+            [listItem, gridCard].forEach((element) => {
+              element.dataset.searchTitle = o.title != null ? String(o.title) : '';
+              element.dataset.searchCategory = cat;
+              element.dataset.searchStatus = stateVal;
+              element.dataset.searchGain = gainVal;
+            });
 
             keptList.push(listItem);
             keptGrid.push(gridCard);
@@ -522,6 +639,7 @@
           gridCards.length = 0;
           gridCards.push(...gridHost.querySelectorAll('[data-archive-grid-card]'));
           renderPage(1, false);
+          renderArchiveSearchResults();
         }
 
       } catch (e) {
