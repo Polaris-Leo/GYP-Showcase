@@ -1984,11 +1984,11 @@ function renderAdminSearchResults() {
       const type = name === 'merch' ? (item.type === 'sale' ? '收藏企划' : '舰长礼物') : (item.category || '未分类');
       const status = name === 'merch' ? (item.status || '未填写') : (item.state || '未填写');
       const gain = name === 'merch' ? (meta[1] || '未填写') : (item.gain || '未填写');
-      const result = document.createElement('button');
-      result.type = 'button';
-      result.className = 'admin-search-result';
-      result.setAttribute('role', 'option');
-      result.setAttribute('aria-label', '编辑' + (item.title || '未命名物品'));
+const result = document.createElement('button');
+result.type = 'button';
+result.className = 'admin-search-result';
+// Native <button> semantics are sufficient; avoid mismatched ARIA roles.
+result.setAttribute('aria-label', '编辑' + (item.title || '未命名物品'));
       result.innerHTML = '<strong></strong><span></span>';
       result.querySelector('strong').textContent = item.title || '未命名物品';
       result.querySelector('span').textContent = [type, status, gain].join(' · ');
