@@ -9,8 +9,9 @@ const source = fs.readFileSync(sourcePath, 'utf8');
 
 function between(start, end) {
   const a = source.indexOf(start);
-  const b = source.indexOf(end, a);
-  if (a < 0 || b < 0) throw new Error('无法从 admin.js 提取测试目标：' + start);
+  if (a < 0) throw new Error('无法从 admin.js 提取测试目标，未找到起点：' + start);
+  const b = source.indexOf(end, a + start.length);
+  if (b < 0) throw new Error('无法从 admin.js 提取测试目标，未找到终点：' + end);
   return source.slice(a, b);
 }
 
