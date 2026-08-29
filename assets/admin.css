@@ -776,7 +776,61 @@ button.blob-tile:hover, button.blob-tile:focus-visible { border-color: var(--fg)
    .blob-grid 的直接子元素，不加就会被当成第 5 个格子挤在一列里。 */
 .blob-pager { grid-column: 1 / -1; }
 
-/* ── 选择图片弹窗 ───────────────────────────────────────────────────── */
+/* ── 上传前裁剪弹窗 ─────────────────────────────────────────────────── */
+.cropper-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(12px, 3vw, 40px);
+  background: oklch(0.28 0 0 / .45);
+  backdrop-filter: blur(3px);
+}
+.cropper-backdrop[hidden] { display: none; }
+.cropper {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, 100%);
+  max-height: min(92svh, 820px);
+  overflow: hidden;
+  border: 1px solid var(--fg);
+  background: var(--bg);
+  box-shadow: 0 24px 70px oklch(0.12 0 0 / .22);
+}
+.cropper-head, .cropper-toolbar, .cropper-foot { padding: 14px 20px; }
+.cropper-head { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border); }
+.cropper-head h3 { margin: 0; font-family: var(--display); font-size: 20px; letter-spacing: -.035em; }
+.cropper-head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 11px var(--mono); }
+.cropper-head .btn-icon { margin-left: auto; flex: 0 0 auto; }
+.cropper-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border-bottom: 1px dashed var(--border); background: var(--surface); }
+.cropper-label { font-size: 11px; font-weight: 600; letter-spacing: .05em; }
+.cropper-label, .cropper-size, .cropper-hint { color: var(--muted); }
+.crop-ratios { display: flex; flex-wrap: wrap; gap: 6px; }
+.crop-ratios .btn { min-width: 44px; }
+.crop-ratios .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--bg); box-shadow: inset 0 -2px 0 var(--accent); }
+.cropper-size { margin-left: auto; font-family: var(--mono); }
+.cropper-stage { height: min(58svh, 520px); min-height: 300px; margin: 16px 20px; overflow: hidden; border: 1px solid oklch(0.18 0 0 / .38); background: oklch(0.22 0.01 257); box-shadow: inset 0 0 0 1px oklch(1 0 0 / .05); }
+.cropper-stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: default; }
+.cropper-message { min-height: 18px; margin: -4px 0 0; padding: 0 20px 8px; color: var(--muted); font: 11px/1.5 var(--mono); }
+.cropper-message[data-kind="bad"] { color: var(--danger); }
+.cropper-foot { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--border); background: var(--surface); }
+.cropper-actions { display: flex; gap: 8px; margin-left: auto; }
+.cropper-actions .btn { min-height: 44px; }
+.cropper-actions .btn-primary { min-width: 148px; }
+.cropper button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 720px) {
+  .cropper { max-height: 94svh; }
+  .cropper-head, .cropper-toolbar, .cropper-foot { padding-left: 14px; padding-right: 14px; }
+  .cropper-stage { height: min(58svh, 460px); min-height: 240px; margin: 12px 14px; }
+  .cropper-size { margin-left: 0; width: 100%; }
+  .cropper-foot { align-items: stretch; flex-direction: column; }
+  .cropper-actions { margin-left: 0; }
+  .cropper-actions .btn { flex: 1; }
+  .cropper-message { padding-left: 14px; padding-right: 14px; }
+}
+
 .picker-backdrop {
   position: fixed;
   inset: 0;
