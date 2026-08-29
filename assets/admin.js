@@ -344,6 +344,19 @@ function clampCropRect(rect, width, height) {
   };
 }
 
+function clampCropRectWithRatio(rect, width, height, ratio) {
+  let cropWidth = Math.max(rect.width, 1);
+  let cropHeight = cropWidth / ratio;
+  if (cropWidth > width) { cropWidth = width; cropHeight = cropWidth / ratio; }
+  if (cropHeight > height) { cropHeight = height; cropWidth = cropHeight * ratio; }
+  return {
+    x: Math.min(Math.max(rect.x, 0), width - cropWidth),
+    y: Math.min(Math.max(rect.y, 0), height - cropHeight),
+    width: cropWidth,
+    height: cropHeight,
+  };
+}
+
 function outputType(type) { return type === 'image/gif' ? 'image/png' : type; }
 
 function cursorForCropHit(hit) {
@@ -356,7 +369,7 @@ function cursorForCropHit(hit) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { ratioValue, fitCropRect, clampCropRect, outputType, cursorForCropHit };
+  module.exports = { ratioValue, fitCropRect, clampCropRect, clampCropRectWithRatio, outputType, cursorForCropHit };
 }
 
 // ⚠️ 必须与 functions/api/upload.js 里的 MAX_BYTES 一致。
@@ -987,7 +1000,8 @@ function resizeCropRect(start, point, handle) {
     if (handle.includes('n')) r.y = start.y + start.height - Math.abs(r.height);
   }
   r.width = Math.abs(r.width); r.height = Math.abs(r.height);
-  return clampCropRect(r, cropState.image.naturalWidth, cropState.image.naturalHeight);
+  return ratio ? clampCropRectWithRatio(r, cropState.image.naturalWidth, cropState.image.naturalHeight, ratio)
+    : clampCropRect(r, cropState.image.naturalWidth, cropState.image.naturalHeight);
 }
 function onCropPointerDown(event) {
   if (cropState.busy || !cropState.rect) return;
