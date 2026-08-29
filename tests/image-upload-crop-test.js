@@ -5,8 +5,8 @@ const source = fs.readFileSync(require.resolve('../assets/admin.js'), 'utf8');
 const start = source.indexOf('function ratioValue');
 const end = source.indexOf('const UPLOAD_PROXY_MAX');
 const sandbox = { module: { exports: {} } };
-vm.runInNewContext(source.slice(start, end) + '\nmodule.exports = { ratioValue, fitCropRect, clampCropRect, outputType };', sandbox);
-const { ratioValue, fitCropRect, clampCropRect, outputType } = sandbox.module.exports;
+vm.runInNewContext(source.slice(start, end) + '\nmodule.exports = { ratioValue, fitCropRect, clampCropRect, outputType, cursorForCropHit };', sandbox);
+const { ratioValue, fitCropRect, clampCropRect, outputType, cursorForCropHit } = sandbox.module.exports;
 
 assert.equal(ratioValue('1:1'), 1);
 assert.equal(ratioValue('free'), null);
@@ -18,4 +18,14 @@ sameRect(clampCropRect({ x: -4, y: 20, width: 500, height: 900 }, 800, 600), {
 });
 assert.equal(outputType('image/gif'), 'image/png');
 assert.equal(outputType('image/jpeg'), 'image/jpeg');
+assert.equal(cursorForCropHit('nw'), 'nwse-resize');
+assert.equal(cursorForCropHit('ne'), 'nesw-resize');
+assert.equal(cursorForCropHit('sw'), 'nesw-resize');
+assert.equal(cursorForCropHit('se'), 'nwse-resize');
+assert.equal(cursorForCropHit('n'), 'ns-resize');
+assert.equal(cursorForCropHit('s'), 'ns-resize');
+assert.equal(cursorForCropHit('e'), 'ew-resize');
+assert.equal(cursorForCropHit('w'), 'ew-resize');
+assert.equal(cursorForCropHit('move'), 'move');
+assert.equal(cursorForCropHit('outside'), 'default');
 console.log('image-upload-crop-test: PASS');

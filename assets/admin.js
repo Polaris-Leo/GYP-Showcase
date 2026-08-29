@@ -346,8 +346,17 @@ function clampCropRect(rect, width, height) {
 
 function outputType(type) { return type === 'image/gif' ? 'image/png' : type; }
 
+function cursorForCropHit(hit) {
+  if (hit === 'nw' || hit === 'se') return 'nwse-resize';
+  if (hit === 'ne' || hit === 'sw') return 'nesw-resize';
+  if (hit === 'n' || hit === 's') return 'ns-resize';
+  if (hit === 'e' || hit === 'w') return 'ew-resize';
+  if (hit === 'move') return 'move';
+  return 'default';
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { ratioValue, fitCropRect, clampCropRect, outputType };
+  module.exports = { ratioValue, fitCropRect, clampCropRect, outputType, cursorForCropHit };
 }
 
 // ⚠️ 必须与 functions/api/upload.js 里的 MAX_BYTES 一致。
@@ -869,7 +878,7 @@ const CROP_MAX_EDGE = 4096;
 let cropperEl = null;
 const cropState = {
   file: null, image: null, target: null, trigger: null, onComplete: null,
-  ratio: null, rect: null, drag: null, busy: false,
+  ratio: null, rect: null, drag: null, hover: 'outside', busy: false,
 };
 
 function cropCanvas() { return cropperEl && cropperEl.querySelector('[data-crop-canvas]'); }
@@ -922,8 +931,20 @@ function drawCropper() {
   ctx.strokeStyle = '#fff';
   ctx.lineWidth = 2;
   ctx.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
-  ctx.fillStyle = '#fff';
-  [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].forEach(([px, py]) => ctx.fillRect(px - 6, py - 6, 12, 12));
+  ctx.strokeStyle = 'rgba(255, 255, 255, .28)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + w / 3, y); ctx.lineTo(x + w / 3, y + h);
+  ctx.moveTo(x + w * 2 / 3, y); ctx.lineTo(x + w * 2 / 3, y + h);
+  ctx.moveTo(x, y + h / 3); ctx.lineTo(x + w, y + h / 3);
+  ctx.moveTo(x, y + h * 2 / 3); ctx.lineTo(x + w, y + h * 2 / 3);
+  ctx.stroke();
+  const active = cropState.drag ? cropState.drag.handle : cropState.hover;
+  const handleColor = active && active !== 'move' && active !== 'outside' ? '#6f9cff' : '#fff';
+  ctx.fillStyle = handleColor;
+  const handleSize = active && active !== 'outside' ? 14 : 12;
+  [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].forEach(([px, py]) => ctx.fillRect(px - handleSize / 2, py - handleSize / 2, handleSize, handleSize));
+  [[x + w / 2, y], [x + w / 2, y + h], [x, y + h / 2], [x + w, y + h / 2]].forEach(([px, py]) => ctx.fillRect(px - handleSize / 2, py - handleSize / 2, handleSize, handleSize));
   syncCropRectLabel();
 }
 function cropPointerPoint(event) {
@@ -931,12 +952,24 @@ function cropPointerPoint(event) {
   const rect = cropCanvas().getBoundingClientRect();
   return { x: (event.clientX - rect.left - t.x) / t.scale, y: (event.clientY - rect.top - t.y) / t.scale };
 }
+function setCropCursor(hit) {
+  const canvas = cropCanvas();
+  if (canvas) canvas.style.cursor = cursorForCropHit(hit);
+}
 function cropHandleAt(point) {
   const r = cropState.rect;
-  const hit = 18 / (cropTransform()?.scale || 1);
+  const scale = cropTransform()?.scale || 1;
+  const cornerHit = Math.max(18 / scale, 12);
+  const edgeHit = Math.max(14 / scale, 10);
   const corners = [['nw', r.x, r.y], ['ne', r.x + r.width, r.y], ['sw', r.x, r.y + r.height], ['se', r.x + r.width, r.y + r.height]];
-  for (const [name, x, y] of corners) if (Math.hypot(point.x - x, point.y - y) <= hit) return name;
-  return point.x >= r.x && point.x <= r.x + r.width && point.y >= r.y && point.y <= r.y + r.height ? 'move' : '';
+  for (const [name, x, y] of corners) if (Math.hypot(point.x - x, point.y - y) <= cornerHit) return name;
+  const insideX = point.x >= r.x && point.x <= r.x + r.width;
+  const insideY = point.y >= r.y && point.y <= r.y + r.height;
+  if (insideX && Math.abs(point.y - r.y) <= edgeHit) return 'n';
+  if (insideX && Math.abs(point.y - (r.y + r.height)) <= edgeHit) return 's';
+  if (insideY && Math.abs(point.x - r.x) <= edgeHit) return 'w';
+  if (insideY && Math.abs(point.x - (r.x + r.width)) <= edgeHit) return 'e';
+  return insideX && insideY ? 'move' : 'outside';
 }
 function resizeCropRect(start, point, handle) {
   let r = { ...start };
@@ -960,14 +993,21 @@ function onCropPointerDown(event) {
   if (cropState.busy || !cropState.rect) return;
   const point = cropPointerPoint(event);
   const handle = cropHandleAt(point);
-  if (!handle) return;
+  if (handle === 'outside') return;
+  cropState.hover = handle;
+  setCropCursor(handle);
   cropState.drag = { pointerId: event.pointerId, handle, startPoint: point, startRect: { ...cropState.rect } };
   cropCanvas().setPointerCapture(event.pointerId);
 }
 function onCropPointerMove(event) {
-  const drag = cropState.drag;
-  if (!drag || drag.pointerId !== event.pointerId) return;
   const point = cropPointerPoint(event);
+  const drag = cropState.drag;
+  if (!drag || drag.pointerId !== event.pointerId) {
+    const hit = cropHandleAt(point);
+    if (cropState.hover !== hit) { cropState.hover = hit; setCropCursor(hit); drawCropper(); }
+    return;
+  }
+  setCropCursor(drag.handle);
   const dx = point.x - drag.startPoint.x;
   const dy = point.y - drag.startPoint.y;
   if (drag.handle === 'move') {
@@ -976,7 +1016,12 @@ function onCropPointerMove(event) {
   drawCropper();
 }
 function onCropPointerUp(event) {
-  if (cropState.drag && cropState.drag.pointerId === event.pointerId) cropState.drag = null;
+  if (cropState.drag && cropState.drag.pointerId === event.pointerId) {
+    cropState.drag = null;
+    const hit = cropState.hover || 'outside';
+    setCropCursor(hit);
+    drawCropper();
+  }
 }
 function selectCropRatio(value) {
   cropState.ratio = ratioValue(value);
@@ -1039,6 +1084,7 @@ function buildCropper() {
   const canvas = panel.querySelector('[data-crop-canvas]');
   canvas.addEventListener('pointerdown', onCropPointerDown); canvas.addEventListener('pointermove', onCropPointerMove);
   canvas.addEventListener('pointerup', onCropPointerUp); canvas.addEventListener('pointercancel', onCropPointerUp);
+  canvas.addEventListener('pointerleave', () => { if (!cropState.drag) { cropState.hover = 'outside'; setCropCursor('outside'); drawCropper(); } });
   panel.querySelector('[data-crop-confirm]').addEventListener('click', async () => {
     if (cropState.busy) return;
     cropState.busy = true; const button = panel.querySelector('[data-crop-confirm]'); button.disabled = true; button.textContent = '处理中…'; cropMessage('正在生成裁剪图片…');
@@ -1050,7 +1096,7 @@ function buildCropper() {
 }
 function openCropper(file, options) {
   if (!cropperEl) cropperEl = buildCropper();
-  cropState.file = file; cropState.target = options.target || null; cropState.trigger = options.trigger || null; cropState.onComplete = options.onComplete; cropState.busy = false; cropState.drag = null;
+  cropState.file = file; cropState.target = options.target || null; cropState.trigger = options.trigger || null; cropState.onComplete = options.onComplete; cropState.busy = false; cropState.drag = null; cropState.hover = 'outside';
   const confirm = cropperEl.querySelector('[data-crop-confirm]'); confirm.disabled = true; confirm.textContent = '确认裁剪并上传';
   cropperEl.querySelector('[data-crop-file]').textContent = file.name + ' · ' + fmtSize(file.size);
   cropMessage('正在读取图片…'); cropperEl.hidden = false; document.addEventListener('keydown', onCropKeydown, true);
