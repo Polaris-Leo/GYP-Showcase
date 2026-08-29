@@ -772,7 +772,8 @@ function runSourceGroup() {
     && /id="blob-upload"/.test(htmlSrc)
     && /blobUploadPicker\.addEventListener\('change'/.test(adminSrc));
   ok('数据页上传复用既有上传通道并在成功后刷新清单',
-    /await uploadFile\(file\)/.test(adminSrc)
+    /openCropper\(file/.test(adminSrc)
+    && /await uploadFile\(croppedFile\)/.test(adminSrc)
     && /invalidateBlobCache\(\);[\s\S]{0,400}renderBlobPanel\(true\);/.test(adminSrc));
   ok('数据页上传总会回到全部筛选，避免新上传的未使用图片被藏住',
     /blobPanelState\.filter = 'all';/.test(adminSrc)

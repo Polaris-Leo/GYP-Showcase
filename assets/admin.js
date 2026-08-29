@@ -317,6 +317,39 @@ function updatePreview(input) {
 // 上传成功只是帮你把 /img?key=… 填进去。所以任意外部图片直链照样能用，
 // 而且万一 Blob 那边出问题，手填这条路一点没受影响。
 
+function ratioValue(value) {
+  if (value === 'free') return null;
+  const [width, height] = String(value).split(':').map(Number);
+  return width > 0 && height > 0 ? width / height : null;
+}
+
+function fitCropRect(width, height, ratio) {
+  if (!ratio) return { x: 0, y: 0, width, height };
+  if (width / height > ratio) {
+    const cropWidth = height * ratio;
+    return { x: (width - cropWidth) / 2, y: 0, width: cropWidth, height };
+  }
+  const cropHeight = width / ratio;
+  return { x: 0, y: (height - cropHeight) / 2, width, height: cropHeight };
+}
+
+function clampCropRect(rect, width, height) {
+  const cropWidth = Math.min(Math.max(rect.width, 1), width);
+  const cropHeight = Math.min(Math.max(rect.height, 1), height);
+  return {
+    x: Math.min(Math.max(rect.x, 0), width - cropWidth),
+    y: Math.min(Math.max(rect.y, 0), height - cropHeight),
+    width: cropWidth,
+    height: cropHeight,
+  };
+}
+
+function outputType(type) { return type === 'image/gif' ? 'image/png' : type; }
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { ratioValue, fitCropRect, clampCropRect, outputType };
+}
+
 // ⚠️ 必须与 functions/api/upload.js 里的 MAX_BYTES 一致。
 // 超过这个大小就改走直传（预签名 PUT），因为函数收不下这么大的请求体。
 const UPLOAD_PROXY_MAX = 4 * 1024 * 1024;
@@ -803,23 +836,20 @@ if (blobUploadPicker && blobUploadBtn) {
       return;
     }
 
-    blobUploadBtn.disabled = true;
-    setBlobUploadStatus('上传中…（' + fmtSize(file.size) + '）');
-    try {
-      await uploadFile(file);
-      invalidateBlobCache();
-      blobPanelState.filter = 'all';
-      blobPanelState.page = 1;
-      document.querySelectorAll('[data-blob-filter]').forEach((btn) => {
-        btn.setAttribute('aria-pressed', String(btn.dataset.blobFilter === 'all'));
-      });
-      setBlobUploadStatus('已上传 · ' + fmtSize(file.size), 'ok');
-      renderBlobPanel(true);
-    } catch (e) {
-      setBlobUploadStatus((e && e.message) || '上传失败', 'bad');
-    } finally {
-      blobUploadBtn.disabled = false;
-    }
+    openCropper(file, {
+      trigger: blobUploadBtn,
+      onComplete: async (croppedFile) => {
+        await uploadFile(croppedFile);
+        invalidateBlobCache();
+        blobPanelState.filter = 'all';
+        blobPanelState.page = 1;
+        document.querySelectorAll('[data-blob-filter]').forEach((btn) => {
+          btn.setAttribute('aria-pressed', String(btn.dataset.blobFilter === 'all'));
+        });
+        setBlobUploadStatus('已上传 · ' + fmtSize(croppedFile.size), 'ok');
+        renderBlobPanel(true);
+      },
+    });
   });
 }
 document.querySelectorAll('[data-blob-filter]').forEach((btn) => {
@@ -834,6 +864,207 @@ document.querySelectorAll('[data-blob-filter]').forEach((btn) => {
   });
 });
 
+/* ── 上传前裁剪弹窗 ─────────────────────────────────────────────────── */
+const CROP_MAX_EDGE = 4096;
+let cropperEl = null;
+const cropState = {
+  file: null, image: null, target: null, trigger: null, onComplete: null,
+  ratio: null, rect: null, drag: null, busy: false,
+};
+
+function cropCanvas() { return cropperEl && cropperEl.querySelector('[data-crop-canvas]'); }
+function cropStage() { return cropperEl && cropperEl.querySelector('[data-crop-stage]'); }
+function cropMessage(text, kind) {
+  const el = cropperEl && cropperEl.querySelector('[data-crop-message]');
+  if (!el) return;
+  el.textContent = text || '';
+  el.dataset.kind = kind || '';
+}
+function syncCropRectLabel() {
+  const el = cropperEl && cropperEl.querySelector('[data-crop-size]');
+  if (el && cropState.rect) el.textContent = Math.round(cropState.rect.width) + ' × ' + Math.round(cropState.rect.height) + ' px';
+}
+function cropTransform() {
+  const canvas = cropCanvas();
+  const stage = cropStage();
+  if (!canvas || !stage || !cropState.image) return null;
+  const width = stage.clientWidth;
+  const height = stage.clientHeight;
+  const scale = Math.min(width / cropState.image.naturalWidth, height / cropState.image.naturalHeight);
+  return { scale, x: (width - cropState.image.naturalWidth * scale) / 2, y: (height - cropState.image.naturalHeight * scale) / 2 };
+}
+function drawCropper() {
+  const canvas = cropCanvas();
+  const stage = cropStage();
+  const image = cropState.image;
+  if (!canvas || !stage || !image) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const width = Math.max(1, stage.clientWidth);
+  const height = Math.max(1, stage.clientHeight);
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  canvas.style.width = width + 'px';
+  canvas.style.height = height + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+  const t = cropTransform();
+  ctx.drawImage(image, t.x, t.y, image.naturalWidth * t.scale, image.naturalHeight * t.scale);
+  const r = cropState.rect;
+  const x = t.x + r.x * t.scale;
+  const y = t.y + r.y * t.scale;
+  const w = r.width * t.scale;
+  const h = r.height * t.scale;
+  ctx.fillStyle = 'rgba(20, 20, 20, .52)';
+  ctx.fillRect(0, 0, width, height);
+  ctx.clearRect(x, y, w, h);
+  ctx.drawImage(image, r.x, r.y, r.width, r.height, x, y, w, h);
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x + 1, y + 1, Math.max(0, w - 2), Math.max(0, h - 2));
+  ctx.fillStyle = '#fff';
+  [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].forEach(([px, py]) => ctx.fillRect(px - 6, py - 6, 12, 12));
+  syncCropRectLabel();
+}
+function cropPointerPoint(event) {
+  const t = cropTransform();
+  const rect = cropCanvas().getBoundingClientRect();
+  return { x: (event.clientX - rect.left - t.x) / t.scale, y: (event.clientY - rect.top - t.y) / t.scale };
+}
+function cropHandleAt(point) {
+  const r = cropState.rect;
+  const hit = 18 / (cropTransform()?.scale || 1);
+  const corners = [['nw', r.x, r.y], ['ne', r.x + r.width, r.y], ['sw', r.x, r.y + r.height], ['se', r.x + r.width, r.y + r.height]];
+  for (const [name, x, y] of corners) if (Math.hypot(point.x - x, point.y - y) <= hit) return name;
+  return point.x >= r.x && point.x <= r.x + r.width && point.y >= r.y && point.y <= r.y + r.height ? 'move' : '';
+}
+function resizeCropRect(start, point, handle) {
+  let r = { ...start };
+  if (handle.includes('w')) { r.width = start.x + start.width - point.x; r.x = point.x; }
+  if (handle.includes('e')) r.width = point.x - start.x;
+  if (handle.includes('n')) { r.height = start.y + start.height - point.y; r.y = point.y; }
+  if (handle.includes('s')) r.height = point.y - start.y;
+  const ratio = cropState.ratio;
+  if (ratio) {
+    const signX = handle.includes('w') ? -1 : 1;
+    const signY = handle.includes('n') ? -1 : 1;
+    if (Math.abs(r.width) / Math.max(Math.abs(r.height), 1) > ratio) r.height = Math.abs(r.width) / ratio * signY;
+    else r.width = Math.abs(r.height) * ratio * signX;
+    if (handle.includes('w')) r.x = start.x + start.width - Math.abs(r.width);
+    if (handle.includes('n')) r.y = start.y + start.height - Math.abs(r.height);
+  }
+  r.width = Math.abs(r.width); r.height = Math.abs(r.height);
+  return clampCropRect(r, cropState.image.naturalWidth, cropState.image.naturalHeight);
+}
+function onCropPointerDown(event) {
+  if (cropState.busy || !cropState.rect) return;
+  const point = cropPointerPoint(event);
+  const handle = cropHandleAt(point);
+  if (!handle) return;
+  cropState.drag = { pointerId: event.pointerId, handle, startPoint: point, startRect: { ...cropState.rect } };
+  cropCanvas().setPointerCapture(event.pointerId);
+}
+function onCropPointerMove(event) {
+  const drag = cropState.drag;
+  if (!drag || drag.pointerId !== event.pointerId) return;
+  const point = cropPointerPoint(event);
+  const dx = point.x - drag.startPoint.x;
+  const dy = point.y - drag.startPoint.y;
+  if (drag.handle === 'move') {
+    cropState.rect = clampCropRect({ ...drag.startRect, x: drag.startRect.x + dx, y: drag.startRect.y + dy }, cropState.image.naturalWidth, cropState.image.naturalHeight);
+  } else cropState.rect = resizeCropRect(drag.startRect, point, drag.handle);
+  drawCropper();
+}
+function onCropPointerUp(event) {
+  if (cropState.drag && cropState.drag.pointerId === event.pointerId) cropState.drag = null;
+}
+function selectCropRatio(value) {
+  cropState.ratio = ratioValue(value);
+  if (cropState.image) {
+    const r = cropState.rect;
+    if (cropState.ratio) {
+      const centerX = r.x + r.width / 2;
+      const centerY = r.y + r.height / 2;
+      const next = fitCropRect(r.width, r.height, cropState.ratio);
+      cropState.rect = clampCropRect({ ...next, x: centerX - next.width / 2, y: centerY - next.height / 2 }, cropState.image.naturalWidth, cropState.image.naturalHeight);
+    }
+    drawCropper();
+  }
+  cropperEl.querySelectorAll('[data-crop-ratio]').forEach((button) => button.setAttribute('aria-pressed', String(button.dataset.cropRatio === value)));
+}
+function outputFileName(file, type) {
+  const base = file.name.replace(/\.[^.]+$/, '') || 'image';
+  return base + '-crop.' + (type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg');
+}
+function exportCropBlob() {
+  return new Promise((resolve, reject) => {
+    const image = cropState.image;
+    const r = cropState.rect;
+    if (!image || !r || r.width < 1 || r.height < 1) { reject(new Error('裁剪区域无效')); return; }
+    const type = outputType(cropState.file.type);
+    const ratio = Math.min(1, CROP_MAX_EDGE / Math.max(r.width, r.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(r.width * ratio));
+    canvas.height = Math.max(1, Math.round(r.height * ratio));
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image, r.x, r.y, r.width, r.height, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob((blob) => {
+      if (!blob) { reject(new Error('裁剪图片失败')); return; }
+      resolve(new File([blob], outputFileName(cropState.file, type), { type }));
+    }, type, type === 'image/jpeg' ? .92 : undefined);
+  });
+}
+function cropFocusables() { return Array.from(cropperEl.querySelectorAll('button:not([disabled])')).filter((el) => el.offsetParent !== null); }
+function onCropKeydown(event) {
+  if (event.key === 'Escape') { event.preventDefault(); closeCropper(); return; }
+  if (event.key !== 'Tab') return;
+  const items = cropFocusables(); if (!items.length) return;
+  if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items[items.length - 1].focus(); }
+  else if (!event.shiftKey && document.activeElement === items[items.length - 1]) { event.preventDefault(); items[0].focus(); }
+}
+function buildCropper() {
+  const back = document.createElement('div');
+  back.className = 'cropper-backdrop'; back.hidden = true;
+  back.innerHTML = '<div class="cropper" role="dialog" aria-modal="true" aria-labelledby="cropper-title">' +
+    '<div class="cropper-head"><h3 id="cropper-title">裁剪图片</h3><span data-crop-file></span><button class="btn btn-icon" type="button" data-crop-close aria-label="关闭">×</button></div>' +
+    '<div class="cropper-toolbar"><span class="cropper-label">裁剪比例</span><div class="crop-ratios" role="group" aria-label="选择裁剪比例">' +
+    '<button class="btn btn-sm" type="button" data-crop-ratio="free" aria-pressed="true">自由</button><button class="btn btn-sm" type="button" data-crop-ratio="1:1" aria-pressed="false">1:1</button><button class="btn btn-sm" type="button" data-crop-ratio="4:3" aria-pressed="false">4:3</button><button class="btn btn-sm" type="button" data-crop-ratio="3:4" aria-pressed="false">3:4</button><button class="btn btn-sm" type="button" data-crop-ratio="16:9" aria-pressed="false">16:9</button><button class="btn btn-sm" type="button" data-crop-ratio="9:16" aria-pressed="false">9:16</button></div><span class="cropper-size" data-crop-size></span></div>' +
+    '<div class="cropper-stage" data-crop-stage><canvas data-crop-canvas></canvas></div><p class="cropper-message" data-crop-message role="status" aria-live="polite"></p>' +
+    '<div class="cropper-foot"><span class="cropper-hint">拖动图片或裁剪框调整构图</span><div class="cropper-actions"><button class="btn" type="button" data-crop-cancel>取消</button><button class="btn btn-primary" type="button" data-crop-confirm disabled>确认裁剪并上传</button></div></div></div>';
+  const panel = back.firstElementChild;
+  back.addEventListener('click', (event) => { if (event.target === back) closeCropper(); });
+  panel.querySelector('[data-crop-close]').addEventListener('click', closeCropper);
+  panel.querySelector('[data-crop-cancel]').addEventListener('click', closeCropper);
+  panel.querySelectorAll('[data-crop-ratio]').forEach((button) => button.addEventListener('click', () => selectCropRatio(button.dataset.cropRatio)));
+  const canvas = panel.querySelector('[data-crop-canvas]');
+  canvas.addEventListener('pointerdown', onCropPointerDown); canvas.addEventListener('pointermove', onCropPointerMove);
+  canvas.addEventListener('pointerup', onCropPointerUp); canvas.addEventListener('pointercancel', onCropPointerUp);
+  panel.querySelector('[data-crop-confirm]').addEventListener('click', async () => {
+    if (cropState.busy) return;
+    cropState.busy = true; const button = panel.querySelector('[data-crop-confirm]'); button.disabled = true; button.textContent = '处理中…'; cropMessage('正在生成裁剪图片…');
+    try { const cropped = await exportCropBlob(); if (cropState.file.type === 'image/gif') cropMessage('GIF 已按静态首帧处理，正在上传…'); else cropMessage('正在上传…'); await cropState.onComplete(cropped); closeCropper(); }
+    catch (error) { cropMessage((error && error.message) || '处理失败，请重试', 'bad'); }
+    finally { cropState.busy = false; button.disabled = false; button.textContent = '确认裁剪并上传'; }
+  });
+  document.body.appendChild(back); return back;
+}
+function openCropper(file, options) {
+  if (!cropperEl) cropperEl = buildCropper();
+  cropState.file = file; cropState.target = options.target || null; cropState.trigger = options.trigger || null; cropState.onComplete = options.onComplete; cropState.busy = false; cropState.drag = null;
+  const confirm = cropperEl.querySelector('[data-crop-confirm]'); confirm.disabled = true; confirm.textContent = '确认裁剪并上传';
+  cropperEl.querySelector('[data-crop-file]').textContent = file.name + ' · ' + fmtSize(file.size);
+  cropMessage('正在读取图片…'); cropperEl.hidden = false; document.addEventListener('keydown', onCropKeydown, true);
+  const url = URL.createObjectURL(file); const image = new Image();
+  image.onload = () => { URL.revokeObjectURL(url); cropState.image = image; cropState.ratio = null; cropState.rect = fitCropRect(image.naturalWidth, image.naturalHeight, null); selectCropRatio('free'); confirm.disabled = false; drawCropper(); };
+  image.onerror = () => { URL.revokeObjectURL(url); cropMessage('图片读取失败，请换一张图片', 'bad'); };
+  image.src = url;
+}
+function closeCropper() {
+  if (!cropperEl || cropperEl.hidden) return;
+  cropperEl.hidden = true; document.removeEventListener('keydown', onCropKeydown, true);
+  const trigger = cropState.trigger; cropState.file = null; cropState.image = null; cropState.target = null; cropState.onComplete = null; cropState.drag = null;
+  if (trigger && trigger.isConnected) trigger.focus();
+}
 /* ── 选择图片弹窗 ─────────────────────────────────────────────────────
  * 一个单例，第一次打开时才建。字段那边不持有任何弹窗结构，所以动态生成的
  * 条目字段（周边／历史）和 admin.html 里的静态字段共用同一个弹窗。
@@ -1140,23 +1371,19 @@ function attachImageControls(scope) {
         return;
       }
 
-      btn.disabled = true;
-      setStatus('上传中…（' + fmtSize(file.size) + '）');
-      try {
-        const url = await uploadFile(file);
-        input.value = url;
-        // 派发 input 事件，交给已有的绑定去做 updateValue / markChanged / updatePreview，
-        // 不在这里重复一遍那三件事——重复就会有一天忘记同步。
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        syncImageControl(input);
-        // 桶里多了一张，清单缓存作废，否则刚传的图在选择弹窗里看不到
-        invalidateBlobCache();
-        setStatus('已上传 · ' + fmtSize(file.size), 'ok');
-      } catch (e) {
-        setStatus((e && e.message) || '上传失败', 'bad');
-      } finally {
-        btn.disabled = false;
-      }
+      openCropper(file, {
+        target: input,
+        trigger: btn,
+        onComplete: async (croppedFile) => {
+          const url = await uploadFile(croppedFile);
+          if (!input.isConnected) throw new Error('该字段已刷新，请重新打开上传');
+          input.value = url;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          syncImageControl(input);
+          invalidateBlobCache();
+          setStatus('已上传 · ' + fmtSize(croppedFile.size), 'ok');
+        },
+      });
     });
   });
 }
